@@ -665,7 +665,64 @@ const STAGES=["Found","Saved","Researching","Contact Needed","Packet Needed","Re
 /* ============================================================
    OPPORTUNITY CARD + DETAIL
    ============================================================ */
-
+function ConfidenceBadge({o,onUpdate}){
+const [c,setC]=useState(null);
+const [busy,setBusy]=useState(false);
+const reload=useCallback(async()=>{
+try{ const r=await API.get("/opportunities/"+o.id+"/confidence"); setC(r); }
+catch(e){ setC({error:true}); }
+},[o.id]);
+useEffect(()=>{ reload(); },[reload]);
+if(!c) return <div className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>checking…</div>;
+if(c.error) return null;
+const bandColor={high:"var(--cyan-bright)",medium:"var(--gold)",
+low:"var(--violet-bright)",unverifiable:"var(--red-bright)"}[c.confidenceBand]||"var(--bone-faint)";
+const bandText={high:"Looks complete",medium:"Partial info",
+low:"Sparse",unverifiable:"No source link"}[c.confidenceBand]||c.confidenceBand;
+const handleVerify=async()=>{
+setBusy(true);
+try{
+const newVerified=!o.verified;
+await API.post("/opportunities/"+o.id+"/verify",{verified:newVerified});
+onUpdate({...o, verified:newVerified, verifiedAt:newVerified?new Date().toISOString():""});
+}finally{ setBusy(false); }
+};
+return (
+<div style={{background:"var(--char2)",border:"1px solid var(--line)",
+padding:"12px 14px",marginBottom:14,borderLeft:"3px solid "+bandColor}}>
+<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:8}}>
+<span className="mono" style={{fontSize:9,letterSpacing:".15em",color:bandColor,textTransform:"uppercase"}}>
+{o.verified?"✓ Verified by you":bandText}
+</span>
+<span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>· {c.completeness}% complete</span>
+{o.verified&&o.verifiedAt&&<span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>· {o.verifiedAt.slice(0,10)}</span>}
+</div>
+{!o.verified&&<div className="mono" style={{fontSize:10,color:"var(--bone-dim)",lineHeight:1.6,marginBottom:8}}>
+{c.confidenceBand==="high"&&"Looks complete — confirm at source before acting."}
+{c.confidenceBand==="medium"&&"Partial info — check the source link before acting."}
+{c.confidenceBand==="low"&&"Sparse — verify everything at the source."}
+{c.confidenceBand==="unverifiable"&&"No source link found — treat with caution."}
+{c.missing.length>0&&<div style={{marginTop:5}}>
+<span style={{color:"var(--red-bright)"}}>Missing:</span> {c.missing.join(", ")}
+</div>}
+</div>}
+<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+{c.sourceLink?<a href={c.sourceLink} target="_blank" rel="noopener" className="mono"
+style={{fontSize:10,color:"var(--cyan-bright)",textDecoration:"none",border:"1px solid #4fb8b355",
+padding:"6px 10px",letterSpacing:".1em",textTransform:"uppercase"}}>
+→ check at {c.sourceLinkType}
+</a>:<span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>no source link — verify manually</span>}
+<button onClick={handleVerify} disabled={busy} className="mono"
+style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 10px",border:"1px solid",
+color:o.verified?"var(--bone-faint)":"var(--black)",
+borderColor:o.verified?"var(--line)":"var(--gold)",
+background:o.verified?"transparent":"var(--gold)",cursor:busy?"wait":"pointer"}}>
+{busy?"…":o.verified?"un-verify":"mark verified ✓"}
+</button>
+</div>
+</div>
+);
+}
 function OppCard({o,onOpen,onMove,onSave}){
   const dl=daysUntil(o.deadline), urgent=dl!=null&&dl>=0&&dl<=7;
   return (
