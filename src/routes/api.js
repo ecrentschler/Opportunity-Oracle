@@ -6,6 +6,7 @@ import { enrich, rankScore } from "../enrichment/engine.js";
 import { parseIntake } from "../enrichment/parser.js";
 import { recurrenceForecasts, cadenceForecast } from "../enrichment/forecast.js";
 import { buildRoundup } from "../enrichment/broadcast.js";
+import { assessOpportunity } from "../enrichment/confidence.js";
 
 export const api = express.Router();
 const uid = () =>
@@ -54,6 +55,23 @@ api.put("/opportunities/:id", (req, res) => {
 api.delete("/opportunities/:id", (req, res) =>
   res.json(store.remove("opportunities", req.params.id))
 );
+// ---- verification / confidence ----
+api.get("/opportunities/:id/confidence", (req, res) => {
+  const o = store.find("opportunities", req.params.id);
+  if (!o) return res.status(404).json({ error: "not found" });
+  res.json(assessOpportunity(o));
+});
+
+api.post("/opportunities/:id/verify", (req, res) => {
+  const o = store.find("opportunities", req.params.id);
+  if (!o) return res.status(404).json({ error: "not found" });
+  const verified = req.body && req.body.verified === false ? false : true;
+  const updated = store.update("opportunities", req.params.id, {
+    verified,
+    verifiedAt: verified ? new Date().toISOString() : "",
+  });
+  res.json(updated);
+});
 
 // ---- paste intake ----
 api.post("/intake", (req, res) =>
