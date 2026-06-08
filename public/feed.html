@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Open Call Oracle — Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<style>
+  :root{
+    --black:#0a0908;--char:#14110f;--char2:#1d1916;--line:#3a312699;
+    --bone:#e8e1d4;--bone-dim:#9c9384;--bone-faint:#6b6256;
+    --gold:#c9a24b;--gold-bright:#e6c068;--red:#a8362e;--red-bright:#d4493c;
+    --cyan:#4fb8b3;--violet:#9b78c9;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--black);color:var(--bone);font-family:'Outfit',sans-serif;
+    font-weight:300;-webkit-font-smoothing:antialiased;min-height:100vh;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+  .wrap{max-width:680px;margin:0 auto;padding:42px 22px 80px}
+  .serif{font-family:'Cormorant Garamond',serif}
+  .mono{font-family:'Space Mono',monospace}
+  a{color:var(--gold-bright);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .grain{position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.025;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .card{animation:fadeUp .4s ease both}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap" id="app">
+  <div class="serif" style="font-size:24px;color:var(--gold);animation:fadeUp .4s">reading the feed…</div>
+</div>
+<script>
+const esc=(s)=>String(s||"").replace(/[&<>]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const fmtDate=(s)=>{if(!s)return"rolling";const d=new Date(s+"T00:00:00");return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});};
+const daysUntil=(s)=>{if(!s)return null;return Math.round((new Date(s)-new Date(new Date().toISOString().slice(0,10)))/86400000);};
+
+const CAT_LABEL={
+  "DJ Booking":"DJs","Live Performance":"Performers","Ecstatic Dance / Movement":"Movement / ecstatic",
+  "Underground / Afterhours":"Underground","Vendor Market":"Vendors","Art Fair":"Vendors",
+  "Mural Call":"Muralists","Public Art RFQ/RFP":"Public art","Gallery Open Call":"Gallery / exhibition",
+  "Installation Call":"Installation","Festival Application":"Festivals","Grant":"Grants",
+  "Residency":"Residencies","Sound Artist Call":"Sound artists","Projection / Visual Call":"Visual / projection",
+};
+const labelFor=(c)=>CAT_LABEL[c]||"Other calls";
+
+function summary(o){
+  const b=[];
+  if(o.city)b.push(esc(o.city));
+  if(o.deadline){const d=daysUntil(o.deadline);b.push(d!=null&&d>=0?`apply by ${fmtDate(o.deadline)} (${d}d)`:`deadline ${fmtDate(o.deadline)}`);}
+  else if(o.dateStart)b.push(fmtDate(o.dateStart));
+  if(o.payMax>0)b.push(`$${o.payMax}`);
+  else if(o.fee>0)b.push(`$${o.fee} fee`);
+  return b.join(" · ");
+}
+
+async function render(){
+  const app=document.getElementById("app");
+  let data;
+  try{ data=await (await fetch("/api/public/feed")).json(); }
+  catch(e){ app.innerHTML='<div class="serif" style="font-size:22px;color:var(--red-bright)">Feed unavailable.</div>'; return; }
+
+  if(!data.enabled){
+    app.innerHTML=`
+      <div class="serif" style="font-size:34px;color:var(--gold)">${esc(data.brand||"Open Call Oracle")}</div>
+      <div class="serif" style="font-size:18px;font-style:italic;color:var(--bone-dim);margin-top:6px">The feed is currently private.</div>
+      <div class="mono" style="font-size:11px;color:var(--bone-faint);margin-top:20px">The keeper of this oracle has not opened the public feed yet.</div>`;
+    return;
+  }
+
+  const groups={};
+  for(const o of data.items){(groups[labelFor(o.category)]=groups[labelFor(o.category)]||[]).push(o);}
+
+  let html=`
+    <div class="serif" style="font-size:36px;line-height:1.05;color:var(--bone)">${esc(data.brand)}</div>
+    <div class="serif" style="font-size:18px;font-style:italic;color:var(--gold);margin-top:4px">
+      ${esc(data.region)} opportunities — open right now</div>
+    <div class="mono" style="font-size:10px;letter-spacing:.18em;color:var(--bone-faint);margin-top:10px;text-transform:uppercase">
+      ${data.items.length} open · updated ${fmtDate((data.asOf||"").slice(0,10))}</div>
+    <div style="height:1px;background:var(--line);margin:26px 0"></div>`;
+
+  if(!data.items.length){
+    html+=`<div class="serif" style="font-size:20px;color:var(--bone-dim);font-style:italic">Quiet right now. Check back soon.</div>`;
+  }
+
+  for(const [label,items] of Object.entries(groups)){
+    html+=`<h2 class="serif" style="font-size:22px;color:var(--gold-bright);margin:28px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px">${esc(label)}</h2>`;
+    for(const o of items){
+      const d=daysUntil(o.deadline);
+      const urgent=d!=null&&d>=0&&d<=7;
+      const link=o.applicationUrl||"";
+      html+=`<div class="card" style="padding:13px 0;border-bottom:1px solid #ffffff0a">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:19px;color:var(--bone);line-height:1.25">
+          ${link?`<a href="${esc(link)}" target="_blank" rel="noopener">${esc(o.title)}</a>`:esc(o.title)}
+        </div>
+        <div class="mono" style="font-size:10px;color:${urgent?'var(--red-bright)':'var(--bone-faint)'};margin-top:5px">
+          ${summary(o)}${o.contactSocial&&!link?` · ${esc(o.contactSocial)}`:""}
+        </div>
+      </div>`;
+    }
+  }
+
+  html+=`
+    <div style="margin-top:42px;padding-top:22px;border-top:1px solid var(--line)">
+      <div class="mono" style="font-size:10px;color:var(--bone-faint);line-height:1.7">
+        Curated by ${esc(data.brand)} · a signal feed for artists, DJs, vendors, and ritual weirdos
+        looking for the next door to open.<br>
+        Share with someone who needs it.
+      </div>
+    </div>`;
+
+  app.innerHTML=html;
+}
+render();
+</script>
+</body>
+</html>

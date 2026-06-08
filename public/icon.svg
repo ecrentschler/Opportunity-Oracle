@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- background field -->
+  <rect width="512" height="512" fill="#0a0908"/>
+
+  <!-- outer ring -->
+  <circle cx="256" cy="256" r="218" fill="none" stroke="#3a3126" stroke-width="2"/>
+  <circle cx="256" cy="256" r="206" fill="none" stroke="#c9a24b" stroke-width="3" stroke-dasharray="3 7" opacity="0.55"/>
+
+  <!-- triangle (alchemical) -->
+  <polygon points="256,90 426,360 86,360" fill="none" stroke="#c9a24b" stroke-width="3" opacity="0.7"/>
+
+  <!-- inverted triangle (paired, forming hexagram) -->
+  <polygon points="256,422 86,152 426,152" fill="none" stroke="#c9a24b" stroke-width="3" opacity="0.7"/>
+
+  <!-- inner ring -->
+  <circle cx="256" cy="256" r="92" fill="none" stroke="#e6c068" stroke-width="2.5"/>
+  <circle cx="256" cy="256" r="74" fill="#14110f" stroke="#3a3126" stroke-width="1"/>
+
+  <!-- the eye / focal point -->
+  <circle cx="256" cy="256" r="34" fill="none" stroke="#c9a24b" stroke-width="2"/>
+  <circle cx="256" cy="256" r="14" fill="#c9a24b"/>
+  <circle cx="256" cy="256" r="6" fill="#0a0908"/>
+
+  <!-- compass marks (cardinal points) -->
+  <line x1="256" y1="38"  x2="256" y2="60"  stroke="#c9a24b" stroke-width="3"/>
+  <line x1="256" y1="452" x2="256" y2="474" stroke="#c9a24b" stroke-width="3"/>
+  <line x1="38"  y1="256" x2="60"  y2="256" stroke="#c9a24b" stroke-width="3"/>
+  <line x1="452" y1="256" x2="474" y2="256" stroke="#c9a24b" stroke-width="3"/>
+</svg>

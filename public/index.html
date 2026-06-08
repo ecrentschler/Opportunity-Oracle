@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Opportunity Oracle</title>
+
+<!-- PWA: phone treats this as an installable app -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0a0908">
+<meta name="color-scheme" content="dark">
+
+<!-- iOS specifics: fullscreen when added to home screen, dark status bar -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Oracle">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  :root{
+    --black:#0a0908;
+    --char:#14110f;
+    --char2:#1d1916;
+    --char3:#272019;
+    --line:#3a312699;
+    --bone:#e8e1d4;
+    --bone-dim:#9c9384;
+    --bone-faint:#6b6256;
+    --gold:#c9a24b;
+    --gold-bright:#e6c068;
+    --red:#a8362e;
+    --red-bright:#d4493c;
+    --violet:#7c5ba6;
+    --violet-bright:#9b78c9;
+    --cyan:#4fb8b3;
+    --cyan-bright:#6fe0d9;
+    --green:#6a8f5f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overscroll-behavior:none}
+  body{
+    background:var(--black);
+    color:var(--bone);
+    font-family:'Outfit',sans-serif;
+    font-weight:300;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+    /* iOS safe-area: notch at top, home-bar at bottom */
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  /* prevent iOS double-tap zoom */
+  button,a{touch-action:manipulation}
+  #root{height:100vh}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:var(--black)}
+  ::-webkit-scrollbar-thumb{background:#2c2419;border-radius:0}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold)}
+  .serif{font-family:'Cormorant Garamond',serif}
+  .mono{font-family:'Space Mono',monospace}
+  input,textarea,select,button{font-family:inherit;color:inherit;outline:none}
+  input,textarea,select{
+    background:var(--black);
+    border:1px solid var(--line);
+    color:var(--bone);
+    padding:9px 11px;
+    font-size:13px;
+    width:100%;
+    transition:border-color .15s;
+  }
+  input:focus,textarea:focus,select:focus{border-color:var(--gold)}
+  textarea{resize:vertical;line-height:1.55;font-family:'Outfit',sans-serif}
+  label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--bone-faint);display:block;margin-bottom:5px;font-family:'Space Mono',monospace}
+  ::placeholder{color:#544b3f}
+  button{cursor:pointer;border:none;background:none}
+  .grain{
+    position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.025;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes glow{0%,100%{opacity:.4}50%{opacity:1}}
+  @keyframes scan{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
+  .fadeUp{animation:fadeUp .4s ease both}
+  .scanline{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.3;animation:scan 7s linear infinite;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div id="root"></div>
+<script>
+  // Register service worker — turns the page into an installable PWA
+  // and caches the shell so the app loads instantly + works offline.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {/* silent */});
+    });
+  }
+</script>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useRef,useCallback} = React;
+
+/* ============================================================
+   OPPORTUNITY ORACLE  —  ritual-tech radar for underground artists
+   single-file v1  ·  built for Draem
+   ============================================================ */
+
+/* data layer: REST API — see API object in app shell */
+/* ---------- ids & dates ---------- */
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const today = ()=> new Date().toISOString().slice(0,10);
+function daysUntil(d){
+  if(!d) return null;
+  const t=new Date(today()), x=new Date(d);
+  return Math.round((x-t)/86400000);
+}
+function fmtDate(d){
+  if(!d) return "—";
+  const x=new Date(d+"T00:00:00");
+  return x.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+}
+
+/* ============================================================
+   SCORING ENGINE  —  explainable, never a black box
+   ============================================================ */
+
+const CATEGORIES = [
+  "DJ Booking","Live Performance","Festival Application","Vendor Market",
+  "Art Fair","Mural Call","Public Art RFQ/RFP","Gallery Open Call",
+  "Installation Call","Residency","Grant","Workshop / Facilitation",
+  "Ecstatic Dance / Movement","Underground / Afterhours","Venue Lead",
+  "Networking Lead","Projection / Visual Call","Sound Artist Call",
+  "Community Art Project"
+];
+
+const CAT_KEYWORDS = {
+  "DJ Booking":["dj","lineup","selector","set time","decks","b2b","opener","support act","club night","resident"],
+  "Underground / Afterhours":["afters","afterhours","warehouse","secret","underground","loft","basement party","renegade"],
+  "Ecstatic Dance / Movement":["ecstatic dance","movement","embodiment","somatic","sound journey","conscious dance","cacao"],
+  "Festival Application":["festival","camping","burn","lakes of fire","transformational","artist application","theme camp"],
+  "Vendor Market":["vendor","booth","market","makers market","pop-up","popup","craft fair","artisan"],
+  "Art Fair":["art fair","art market","fine art fair"],
+  "Mural Call":["mural","wall","exterior paint","muralist"],
+  "Public Art RFQ/RFP":["public art","rfq","rfp","percent for art","civic art","call to artists"],
+  "Gallery Open Call":["open call","exhibition","group show","juried","gallery","call for entry","art show"],
+  "Installation Call":["installation","immersive","activation","interactive","sculpture","art build","large-scale"],
+  "Residency":["residency","artist in residence","studio residency","fellowship residency"],
+  "Grant":["grant","funding","stipend","award","microgrant","fiscal sponsor"],
+  "Workshop / Facilitation":["workshop","facilitate","teach","class","lead a session","facilitator"],
+  "Projection / Visual Call":["projection","vj","visuals","video mapping","projection mapping","light artist"],
+  "Sound Artist Call":["sound artist","sound installation","field recording","sonic","sound bath"],
+  "Live Performance":["performance","perform","stage","live act","showcase","feature artist"],
+  "Venue Lead":["venue","book the room","host night","residency night","monthly night"],
+  "Community Art Project":["community art","mural community","collaborative art","neighborhood art"],
+  "Networking Lead":["meetup","mixer","artist meet","networking","creative social"]
+};
+
+function classify(text){
+  const t=(text||"").toLowerCase();
+  let best="Networking Lead", score=0;
+  for(const [cat,kws] of Object.entries(CAT_KEYWORDS)){
+    let s=0;
+    for(const k of kws){ if(t.includes(k)) s += k.length>6?2:1; }
+    if(s>score){ score=s; best=cat; }
+  }
+  return best;
+}
+
+/* haversine-free rough distance via known MI anchor cities */
+const CITY_COORDS = {
+  "detroit":[42.33,-83.05],"ann arbor":[42.28,-83.74],"ypsilanti":[42.24,-83.61],
+  "willis":[42.13,-83.65],"ferndale":[42.46,-83.13],"hamtramck":[42.39,-83.06],
+  "grand rapids":[42.96,-85.67],"lansing":[42.73,-84.55],"chicago":[41.88,-87.63],
+  "cleveland":[41.50,-81.69],"toledo":[41.65,-83.54],"columbus":[39.96,-82.99],
+  "kalamazoo":[42.29,-85.59],"flint":[43.01,-83.69],"pontiac":[42.64,-83.29]
+};
+function distMiles(city, home){
+  if(!city) return null;
+  const c=CITY_COORDS[city.toLowerCase().trim().split(",")[0]];
+  const h=CITY_COORDS[(home||"willis").toLowerCase().trim().split(",")[0]] || CITY_COORDS["willis"];
+  if(!c) return null;
+  const dy=(c[0]-h[0])*69, dx=(c[1]-h[1])*54;
+  return Math.round(Math.sqrt(dx*dx+dy*dy));
+}
+
+function scoreFit(opp, profile){
+  const reasons=[], warnings=[];
+  let pts=0, max=0;
+  const blob = `${opp.title} ${opp.description} ${opp.venueName} ${opp.organizationName}`.toLowerCase();
+
+  // distance (25)
+  max+=25;
+  const d = distMiles(opp.city, profile.location);
+  if(d!=null){
+    if(d<=profile.radiusMiles){
+      const close = Math.max(0, 25 - (d/profile.radiusMiles)*16);
+      pts+=Math.round(close);
+      reasons.push(`Within ${d} mi (radius ${profile.radiusMiles})`);
+    } else { warnings.push(`~${d} mi — outside ${profile.radiusMiles} mi radius`); }
+  } else if(opp.city){ pts+=10; warnings.push(`Distance to ${opp.city} unknown`); }
+  else { pts+=8; }
+
+  // category match (22)
+  max+=22;
+  if(profile.types.includes(opp.category) ||
+     profile.types.some(t=> opp.category.toLowerCase().includes(t.toLowerCase()))){
+    pts+=22; reasons.push(`Category match: ${opp.category}`);
+  } else { warnings.push(`Category "${opp.category}" not in your focus`); }
+
+  // vibe keyword match (20)
+  max+=20;
+  const vibeHits = (profile.vibeKeywords||[]).filter(k=>blob.includes(k.toLowerCase()));
+  if(vibeHits.length){
+    pts+=Math.min(20, vibeHits.length*7);
+    reasons.push(`Vibe: ${vibeHits.slice(0,4).join(", ")}`);
+  }
+  // genre / medium
+  const gmHits = [...(profile.musicGenres||[]),...(profile.artMediums||[])]
+    .filter(k=>blob.includes(k.toLowerCase()));
+  if(gmHits.length){ pts+=Math.min(8,gmHits.length*4); max+=8; reasons.push(`Match: ${gmHits.slice(0,3).join(", ")}`); }
+  else { max+=8; }
+
+  // avoid keywords (penalty)
+  const avoidHits=(profile.avoidKeywords||[]).filter(k=>blob.includes(k.toLowerCase()));
+  if(avoidHits.length){ pts-=18; warnings.push(`Avoid-flag: ${avoidHits.join(", ")}`); }
+
+  // pay (15)
+  max+=15;
+  if(opp.payMax>0){
+    if(opp.payMax>=profile.minimumPay){ pts+=15; reasons.push(`Pays $${opp.payMax} (≥ your $${profile.minimumPay} min)`); }
+    else { pts+=5; warnings.push(`Pay $${opp.payMax} below your $${profile.minimumPay} min`); }
+  } else if(opp.fee>0){ pts+=4; warnings.push(`Costs $${opp.fee} to apply/vend`); }
+  else { pts+=7; warnings.push("Pay not listed"); }
+
+  // contact present (10)
+  max+=10;
+  if(opp.contactEmail||opp.contactSocial||opp.applicationUrl){ pts+=10; }
+  else { warnings.push("No contact / application path found"); }
+
+  const fit = Math.max(0, Math.min(100, Math.round((pts/max)*100)));
+  return {fitScore:fit, reasons, warnings};
+}
+
+function scoreUrgency(opp){
+  const reasons=[];
+  let u=10;
+  const dl = daysUntil(opp.deadline);
+  const ev = daysUntil(opp.dateStart);
+  if(dl!=null){
+    if(dl<0){ u=5; reasons.push("Deadline passed"); }
+    else if(dl<=2){ u=98; reasons.push(`Deadline in ${dl}d`); }
+    else if(dl<=7){ u=85; reasons.push(`Deadline in ${dl}d`); }
+    else if(dl<=14){ u=65; reasons.push(`Deadline in ${dl}d`); }
+    else if(dl<=30){ u=45; reasons.push(`Deadline in ${dl}d`); }
+    else { u=25; reasons.push(`Deadline in ${dl}d`); }
+  }
+  if(ev!=null && ev>=0){
+    let eu = ev<=3?90 : ev<=7?75 : ev<=21?50 : ev<=60?30 : 15;
+    if(eu>u){ u=eu; reasons.push(`Event in ${ev}d`); }
+  }
+  if(dl==null && ev==null){ reasons.push("No dates — watchlist"); u=15; }
+  let bucket = u>=80?"Act this week" : u>=50?"Soon" : u>=30?"Research later" : "Watchlist";
+  return {urgencyScore:u, urgencyBucket:bucket, urgencyReasons:reasons};
+}
+
+function scoreValue(opp, profile){
+  const reasons=[];
+  let v=30;
+  if(opp.payMax>=500){ v+=30; reasons.push("Strong pay"); }
+  else if(opp.payMax>=150){ v+=18; reasons.push("Paid"); }
+  else if(opp.payMax>0){ v+=8; reasons.push("Small pay"); }
+  if(opp.fee>0){ v-= opp.fee>50?14:7; reasons.push(`-$${opp.fee} fee`); }
+  else if(opp.payMax===0){ reasons.push("Unpaid — weigh exposure"); }
+  const blob=`${opp.title} ${opp.description}`.toLowerCase();
+  if(/festival|fest/.test(blob)){ v+=14; reasons.push("Festival reach"); }
+  if(/gallery|museum|exhibition/.test(blob)){ v+=12; reasons.push("Portfolio/prestige"); }
+  if(/residency|grant|fellowship/.test(blob)){ v+=16; reasons.push("Career-building"); }
+  if(/crazy wisdom|black sands|recurring|monthly|series/.test(blob)){ v+=10; reasons.push("Repeat potential"); }
+  if(opp.relationshipBoost){ v+=8; reasons.push("Existing relationship"); }
+  v=Math.max(0,Math.min(100,v));
+  return {valueScore:v, valueReasons:reasons};
+}
+
+function classifyAutomation(opp){
+  const reasons=[];
+  if(opp.fee>0){ return {automationStatus:"Blocked by Payment", autoReasons:[`$${opp.fee} fee — manual review required`]}; }
+  const blob=`${opp.title} ${opp.description}`.toLowerCase();
+  if(/login|sign in|account required|member/.test(blob)) return {automationStatus:"Blocked by Login",autoReasons:["Login wall detected"]};
+  if(/captcha|recaptcha/.test(blob)) return {automationStatus:"Blocked by CAPTCHA",autoReasons:["CAPTCHA likely"]};
+  if(/grant|tax|w-?9|legal|contract|budget/.test(blob)) return {automationStatus:"Manual Only",autoReasons:["Legal/financial info required"]};
+  if(opp.contactEmail && !opp.applicationUrl){ return {automationStatus:"Can Auto-Send Email",autoReasons:["Email found — draft ready, you approve send"]}; }
+  if(opp.applicationUrl){ return {automationStatus:"Needs Human Input",autoReasons:["External form — unknown fields, prep packet then submit manually"]}; }
+  if(opp.contactSocial){ return {automationStatus:"Draft Only",autoReasons:["Social DM — copy draft, send from your account"]}; }
+  return {automationStatus:"Needs Human Input",autoReasons:["No clear path — research contact"]};
+}
+
+function enrich(opp, profile){
+  const cat = opp.category && opp.category!=="auto" ? opp.category
+            : classify(`${opp.title} ${opp.description}`);
+  const o = {...opp, category:cat};
+  return {
+    ...o,
+    ...scoreFit(o,profile),
+    ...scoreUrgency(o),
+    ...scoreValue(o,profile),
+    ...classifyAutomation(o)
+  };
+}
+
+const WEIGHTS = {fit:.45,urgency:.25,value:.20,rel:.10};
+function rankScore(o){
+  const rel = o.relationshipBoost?70:35;
+  return Math.round(o.fitScore*WEIGHTS.fit + o.urgencyScore*WEIGHTS.urgency +
+                    o.valueScore*WEIGHTS.value + rel*WEIGHTS.rel);
+}
+
+/* ============================================================
+   PASTE INTAKE PARSER  —  flyer / caption / newsletter -> opportunity
+   conservative: never invents. unknown stays unknown.
+   ============================================================ */
+
+const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function parseDateLoose(txt){
+  const t=txt.toLowerCase();
+  // ISO
+  let m=t.match(/(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0];
+  // Month DD, YYYY  or  Month DD
+  m=t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?/);
+  if(m){
+    const mo=MONTHS[m[1]], day=+m[2];
+    let yr=m[3]?+m[3]:new Date().getFullYear();
+    const cand=new Date(yr,mo,day);
+    if(!m[3] && cand < new Date(today())) yr+=1;
+    return `${yr}-${String(mo+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }
+  // MM/DD or MM/DD/YYYY
+  m=t.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if(m){
+    const mo=+m[1]-1, day=+m[2];
+    let yr=m[3]? (m[3].length===2?2000+ +m[3]:+m[3]) : new Date().getFullYear();
+    const cand=new Date(yr,mo,day);
+    if(!m[3] && cand < new Date(today())) yr+=1;
+    return `${yr}-${String(mo+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }
+  return "";
+}
+
+function parseIntake(raw){
+  const text=raw.trim();
+  const lines=text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+  const low=text.toLowerCase();
+  const out={
+    title:"", description:text.slice(0,600), category:"auto",
+    city:"", venueName:"", organizationName:"",
+    dateStart:"", deadline:"", contactEmail:"", contactSocial:"",
+    applicationUrl:"", payMin:0, payMax:0, fee:0, _found:[]
+  };
+  const F=l=>out._found.push(l);
+
+  // title = first substantial line; if it's one long blob, take the first clause
+  let t0 = (lines.find(l=>l.length>3 && l.length<120) || lines[0] || "Untitled").replace(/^[#*\-\s]+/,"");
+  if(t0.length>90){
+    const clause = t0.split(/\s[\/|—–-]\s|\.\s|!\s|@\s|\bwww\.|https?:/)[0].trim();
+    t0 = (clause.length>3 && clause.length<=90) ? clause : t0.slice(0,80).trim()+"…";
+  }
+  out.title = t0;
+  F("title");
+
+  // email
+  let m=text.match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/);
+  if(m){ out.contactEmail=m[0]; F("email"); }
+
+  // social handle
+  m=text.match(/@[A-Za-z0-9_.]{2,30}/);
+  if(m && !out.contactEmail.includes(m[0])){ out.contactSocial=m[0].replace(/[._]+$/,""); F("social"); }
+
+  // url / application link
+  const urls=text.match(/https?:\/\/[^\s)>\]]+/g);
+  if(urls){
+    out.applicationUrl = urls.find(u=>/apply|submission|form|callforentry|cafe|artcall|submittable|tally|typeform|google\.com\/forms/i.test(u)) || urls[0];
+    F("link");
+  }
+
+  // dates — deadline keywords win for deadline slot
+  const dlLine = lines.find(l=>/deadline|apply by|submit by|due|closes|applications close|entry deadline/i.test(l));
+  if(dlLine){ const d=parseDateLoose(dlLine); if(d){ out.deadline=d; F("deadline"); } }
+  const evLine = lines.find(l=>/(date|when|happening|takes place|join us|live on|performing|show)/i.test(l)) || lines.find(l=>parseDateLoose(l));
+  if(evLine){ const d=parseDateLoose(evLine); if(d && d!==out.deadline){ out.dateStart=d; F("event date"); } }
+  if(!out.dateStart && !out.deadline){ const d=parseDateLoose(text); if(d){ out.dateStart=d; F("date"); } }
+
+  // city — scan known anchors first
+  for(const c of Object.keys(CITY_COORDS)){
+    if(low.includes(c)){ out.city=c.replace(/\b\w/g,x=>x.toUpperCase()); F("city"); break; }
+  }
+  if(!out.city){
+    m=text.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)?),?\s+(MI|Michigan|OH|IL|IN|MI\b)/);
+    if(m){ out.city=m[1]; F("city"); }
+  }
+
+  // venue / org
+  m=text.match(/(?:at|@)\s+([A-Z][\w'&\- ]{2,40})(?:\n|,|\.|!)/);
+  if(m){ out.venueName=m[1].trim(); F("venue"); }
+  m=text.match(/(?:presented by|hosted by|brought to you by|by)\s+([A-Z][\w'&\- ]{2,40})/i);
+  if(m){ out.organizationName=m[1].trim(); F("organizer"); }
+
+  // money
+  m=low.match(/\$\s?(\d{2,5})(?:\s?[-–]\s?\$?\s?(\d{2,5}))?/);
+  if(m){
+    const a=+m[1], b=m[2]?+m[2]:a;
+    if(/fee|cost|application fee|entry fee|booth.*\$|\$.*booth|vendor fee/.test(low)){
+      out.fee=Math.min(a,b); F("fee");
+    } else {
+      out.payMin=Math.min(a,b); out.payMax=Math.max(a,b); F("pay");
+    }
+  }
+  if(/free to apply|no application fee|no entry fee/.test(low)){ out.fee=0; }
+
+  out.category=classify(text);
+  return out;
+}
+
+/* ============================================================
+   SUBMISSION ASSISTANT  —  outreach drafts + application packets
+   never invents facts. unknowns flagged explicitly.
+   ============================================================ */
+
+function pickAssets(cat, assets){
+  const find=t=>assets.find(a=>a.type===t)?.content||"";
+  const links=find("Links block");
+  if(/DJ|Ecstatic|Performance|Underground|Sound/.test(cat))
+    return [["Bio",find("DJ bio")],["Links",links],["Tech",find("Tech rider / needs")]];
+  if(/Vendor|Art Fair/.test(cat))
+    return [["Bio",find("Vendor bio")],["Links",links],["Setup",find("Tech rider / needs")]];
+  if(/Mural|Public Art|Installation/.test(cat))
+    return [["Statement",find("Artist statement")],["Links",links],["Tech",find("Tech rider / needs")]];
+  return [["Statement",find("Artist statement")],["Bio",find("Short artist bio")],["Links",links]];
+}
+
+const TONES=["artistic","professional","short DM","weird underground","warm community","bold booking pitch"];
+
+function draftOutreach(opp, profile, assets, tone, kind){
+  const name = opp.organizationName || opp.venueName || "there";
+  const a = profile.artistName, loc = profile.location;
+  const links = assets.find(x=>x.type==="Links block")?.content || "";
+  const cat=opp.category;
+  const role = /DJ|Ecstatic|Underground|Sound|Performance/.test(cat)?"DJ / sound artist"
+            : /Vendor|Art Fair/.test(cat)?"maker / vendor"
+            : /Mural|Public|Installation/.test(cat)?"installation / public artist"
+            : "artist";
+
+  const open = {
+    "artistic":`Hi ${name},\n\nI'm ${a}, a ${loc}-based ${role}. ${opp.title} caught me — it feels aligned with the work I make.`,
+    "professional":`Hello ${name},\n\nMy name is ${a}, a ${loc}-based ${role}. I'm writing regarding ${opp.title}.`,
+    "short DM":`hey — ${a} here, ${role} out of ${loc}. saw ${opp.title}, would love to be considered.`,
+    "weird underground":`${name} —\n\n${a}. ${role}, ${loc}. ${opp.title} pulled me in. my sets/work live in the dark-ritual-ecstatic zone.`,
+    "warm community":`Hi ${name},\n\nI'm ${a} — ${role} based in ${loc}. ${opp.title} resonated with me and the kind of space I love being part of.`,
+    "bold booking pitch":`${name} — ${a} here. ${role}, ${loc}. I want in on ${opp.title}. Here's why it's a fit:`
+  }[tone] || `Hi ${name}, I'm ${a}.`;
+
+  let body;
+  if(kind==="follow-up")
+    body=`\n\nFollowing up on my note about ${opp.title} — still very interested and happy to send anything you need. No rush, just keeping it on your radar.`;
+  else if(kind==="press kit send")
+    body=`\n\nSending my press kit for ${opp.title}:\n${links}\n\nHappy to tailor a fuller proposal.`;
+  else if(/Vendor|Art Fair/.test(cat))
+    body=`\n\nI run ArtofDreamwalker — handcrafted electroformed copper, Norse/Egyptian sacred-geometry jewelry (260+ sales, 4.9★). I'd love a booth.\n\n${links}\n\nCan send booth photos + product range on request.`;
+  else if(/Mural|Public|Installation/.test(cat))
+    body=`\n\nMy work draws on Egyptian, Norse and shamanic symbolism — ancient-futuristic, sacred but feral. I can send a tailored concept + relevant portfolio pieces for this.\n\n${links}\n\nWould you be open to a fuller proposal?`;
+  else
+    body=`\n\nI play ritual / tribal / ecstatic-leaning sets built as journeys — made for conscious floors and the sacred-weird hours.\n\n${links}\n\nWould you be open to me sending a mix + fuller proposal?`;
+
+  const close=`\n\nWith respect,\n${a}`;
+  const warn = (!opp.contactEmail && !opp.contactSocial) ? "\n\n⚠ No contact found — research recipient before sending." : "";
+  return open+body+close+warn;
+}
+
+function buildPacket(opp, profile, assets){
+  const chosen=pickAssets(opp.category,assets);
+  const required=[], missing=[];
+  const c=opp.category;
+  if(/Mural|Public/.test(c)){ required.push("Artist statement","Mural concept (tailor per call)","3-6 portfolio images","Public art experience","Community engagement statement","Budget range","Timeline","Insurance/tax info"); }
+  else if(/Installation/.test(c)){ required.push("Installation proposal","Concept render/sketch","Materials list","Build timeline","Power/tech needs","Portfolio images","Safety plan"); }
+  else if(/Vendor|Art Fair/.test(c)){ required.push("Vendor bio","Product description","Booth dimensions (10x10)","Booth setup photos","Price range","Shop/social links","Sales tax / insurance note"); }
+  else if(/DJ|Ecstatic|Underground|Sound|Performance/.test(c)){ required.push("DJ bio","Genre description","2+ mix links","Past events","Tech needs / rider","Availability","Social links"); }
+  else if(/Festival/.test(c)){ required.push("Project/set description","Bio","Mix or portfolio links","Past events/builds","Tech & space needs","Availability","Budget (if grant)"); }
+  else if(/Gallery/.test(c)){ required.push("Artist statement","Portfolio (titled, sized)","CV / past shows","Entry form","Image list"); }
+  else if(/Grant|Residency/.test(c)){ required.push("Project statement","Budget","Timeline","Work samples","CV","References"); }
+  else required.push("Bio","Links","Brief proposal");
+
+  const have = new Set(assets.map(a=>a.type.toLowerCase()));
+  required.forEach(r=>{
+    const k=r.toLowerCase();
+    const covered = /bio/.test(k)&&have.has("short artist bio")
+      || /statement/.test(k)&&have.has("artist statement")
+      || /links|social/.test(k)&&have.has("links block")
+      || /tech|rider|power|booth setup|setup/.test(k)&&have.has("tech rider / needs");
+    if(!covered && !/image|photo|render|sketch|concept|budget|timeline|cv|reference|insurance|tax|availability|sample/.test(k))
+      missing.push(r);
+    if(/image|photo|render|sketch|cv|insurance|tax|budget|sample|reference/.test(k)) missing.push(r+" (you must supply)");
+  });
+
+  return {
+    summary:`${opp.category} · ${opp.city||"location TBD"} · ${opp.venueName||opp.organizationName||""}`.trim(),
+    deadline:opp.deadline||opp.dateStart||"none set",
+    required,
+    missing:[...new Set(missing)],
+    suggestedAssets:chosen,
+    outreach:draftOutreach(opp,profile,assets,"artistic","initial inquiry"),
+    automation:opp.automationStatus,
+    autoReasons:opp.autoReasons
+  };
+}
+/* ============================================================
+   UI  —  shared atoms
+   ============================================================ */
+
+function Ring({value,size=46,label}){
+  const r=size/2-4, c=2*Math.PI*r, off=c-(value/100)*c;
+  const col = value>=75?"var(--cyan-bright)":value>=50?"var(--gold)":value>=30?"var(--violet)":"var(--bone-faint)";
+  return (
+    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
+      <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+        <circle cx={size/2} cy={size/2} r={r} stroke="#241d15" strokeWidth="3" fill="none"/>
+        <circle cx={size/2} cy={size/2} r={r} stroke={col} strokeWidth="3" fill="none"
+          strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round"
+          style={{transition:"stroke-dashoffset .6s ease"}}/>
+      </svg>
+      <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",
+        alignItems:"center",justifyContent:"center",lineHeight:1}}>
+        <span className="mono" style={{fontSize:13,color:col,fontWeight:700}}>{value}</span>
+        {label&&<span className="mono" style={{fontSize:7,color:"var(--bone-faint)",letterSpacing:".1em",marginTop:1}}>{label}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Tag({children,color="var(--gold)"}){
+  return <span className="mono" style={{fontSize:9,letterSpacing:".1em",textTransform:"uppercase",
+    color,border:`1px solid ${color}55`,padding:"3px 7px",borderRadius:0,whiteSpace:"nowrap"}}>{children}</span>;
+}
+
+function Btn({children,onClick,kind="ghost",size="m",style={}}){
+  const base={fontFamily:"'Space Mono',monospace",fontSize:size==="s"?10:11,letterSpacing:".1em",
+    textTransform:"uppercase",padding:size==="s"?"6px 10px":"9px 15px",borderRadius:0,
+    transition:"all .15s",cursor:"pointer",border:"1px solid",whiteSpace:"nowrap"};
+  const kinds={
+    gold:{...base,background:"var(--gold)",color:"var(--black)",borderColor:"var(--gold)",fontWeight:700},
+    ghost:{...base,background:"transparent",color:"var(--bone-dim)",borderColor:"var(--line)"},
+    danger:{...base,background:"transparent",color:"var(--red-bright)",borderColor:"#a8362e55"},
+    cyan:{...base,background:"transparent",color:"var(--cyan-bright)",borderColor:"#4fb8b355"}
+  };
+  return <button onClick={onClick} style={{...kinds[kind],...style}}
+    onMouseEnter={e=>{if(kind==="ghost"){e.currentTarget.style.borderColor="var(--gold)";e.currentTarget.style.color="var(--bone)";}}}
+    onMouseLeave={e=>{if(kind==="ghost"){e.currentTarget.style.borderColor="var(--line)";e.currentTarget.style.color="var(--bone-dim)";}}}
+    >{children}</button>;
+}
+
+function Modal({children,onClose,wide}){
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"#000000d8",zIndex:1000,
+      display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",overflow:"auto"}}>
+      <div onClick={e=>e.stopPropagation()} className="fadeUp" style={{background:"var(--char)",
+        border:"1px solid var(--line)",maxWidth:wide?900:560,width:"100%",position:"relative"}}>
+        <div className="scanline"/>
+        <button onClick={onClose} style={{position:"absolute",top:14,right:16,color:"var(--bone-faint)",
+          fontSize:22,lineHeight:1,zIndex:2}}>×</button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const AUTO_COLOR={
+  "Can Auto-Send Email":"var(--cyan-bright)","Can Assisted Submit":"var(--cyan-bright)",
+  "Draft Only":"var(--gold)","Ready for Review":"var(--gold)","Needs Human Input":"var(--violet-bright)",
+  "Blocked by Payment":"var(--red-bright)","Blocked by Login":"var(--red-bright)",
+  "Blocked by CAPTCHA":"var(--red-bright)","Blocked by Terms":"var(--red-bright)","Manual Only":"var(--bone-dim)"
+};
+const STAGES=["Found","Saved","Researching","Contact Needed","Packet Needed","Ready for Review","Applied / Submitted","Follow-Up","Accepted","Declined","Archived"];
+/* ============================================================
+   OPPORTUNITY CARD + DETAIL
+   ============================================================ */
+
+function OppCard({o,onOpen,onMove,onSave}){
+  const dl=daysUntil(o.deadline), urgent=dl!=null&&dl>=0&&dl<=7;
+  return (
+    <div onClick={()=>onOpen(o)} className="fadeUp" style={{background:"var(--char)",
+      border:`1px solid ${urgent?"#a8362e66":"var(--line)"}`,padding:14,cursor:"pointer",
+      display:"flex",gap:13,alignItems:"flex-start",transition:"border-color .15s"}}
+      onMouseEnter={e=>e.currentTarget.style.borderColor="var(--gold)"}
+      onMouseLeave={e=>e.currentTarget.style.borderColor=urgent?"#a8362e66":"var(--line)"}>
+      <Ring value={rankScore(o)} label="RANK"/>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
+          <Tag>{o.category}</Tag>
+          {o.relationshipBoost&&<Tag color="var(--violet-bright)">relationship</Tag>}
+          <Tag color={AUTO_COLOR[o.automationStatus]||"var(--bone-dim)"}>{o.automationStatus}</Tag>
+        </div>
+        <div className="serif" style={{fontSize:19,color:"var(--bone)",lineHeight:1.25,marginBottom:5}}>{o.title}</div>
+        <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",display:"flex",gap:14,flexWrap:"wrap"}}>
+          <span>{o.city||"loc TBD"}</span>
+          {o.deadline&&<span style={{color:urgent?"var(--red-bright)":"var(--bone-faint)"}}>⌛ {fmtDate(o.deadline)}{dl!=null&&` (${dl}d)`}</span>}
+          {o.dateStart&&<span>◆ {fmtDate(o.dateStart)}</span>}
+          {o.payMax>0&&<span style={{color:"var(--cyan)"}}>${o.payMax}</span>}
+          {o.fee>0&&<span style={{color:"var(--red)"}}>fee ${o.fee}</span>}
+        </div>
+        <div style={{display:"flex",gap:14,marginTop:9,alignItems:"center"}}>
+          <span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>FIT <b style={{color:"var(--gold)"}}>{o.fitScore}</b></span>
+          <span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>URG <b style={{color:"var(--red-bright)"}}>{o.urgencyScore}</b></span>
+          <span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>VAL <b style={{color:"var(--cyan)"}}>{o.valueScore}</b></span>
+          <span className="mono" style={{fontSize:9,color:"var(--bone-faint)",marginLeft:"auto"}}>{o.urgencyBucket}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({label,children}){
+  return <div style={{marginBottom:13}}><label>{label}</label>{children}</div>;
+}
+
+function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
+  const [tab,setTab]=useState("intel");
+  const [tone,setTone]=useState("artistic");
+  const [kind,setKind]=useState("initial inquiry");
+  const [copied,setCopied]=useState("");
+  const packet=useMemo(()=>buildPacket(o,profile,assets),[o,profile,assets]);
+  const draft=useMemo(()=>draftOutreach(o,profile,assets,tone,kind),[o,profile,assets,tone,kind]);
+  const copy=(txt,id)=>{navigator.clipboard.writeText(txt);setCopied(id);setTimeout(()=>setCopied(""),1500);};
+  const set=(k,v)=>onUpdate({...o,[k]:v});
+
+  const TabBtn=({id,children})=>(
+    <button onClick={()=>setTab(id)} className="mono" style={{fontSize:10,letterSpacing:".1em",
+      textTransform:"uppercase",padding:"10px 14px",background:"none",
+      color:tab===id?"var(--gold)":"var(--bone-faint)",
+      borderBottom:tab===id?"2px solid var(--gold)":"2px solid transparent"}}>{children}</button>
+  );
+
+  return (
+    <Modal onClose={onClose} wide>
+      <div style={{padding:"26px 30px 0"}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+          <Tag>{o.category}</Tag>
+          <Tag color={AUTO_COLOR[o.automationStatus]}>{o.automationStatus}</Tag>
+          {o.relationshipBoost&&<Tag color="var(--violet-bright)">relationship</Tag>}
+        </div>
+        <h2 className="serif" style={{fontSize:28,fontWeight:500,lineHeight:1.15,marginBottom:6}}>{o.title}</h2>
+        <div className="mono" style={{fontSize:11,color:"var(--bone-faint)",marginBottom:18}}>
+          {o.city||"location TBD"} · {o.venueName||o.organizationName||"—"} · rank {rankScore(o)}
+        </div>
+      </div>
+      <div style={{display:"flex",borderBottom:"1px solid var(--line)",padding:"0 18px",overflowX:"auto"}}>
+        <TabBtn id="intel">Intel</TabBtn>
+        <TabBtn id="packet">Packet</TabBtn>
+        <TabBtn id="outreach">Outreach</TabBtn>
+        <TabBtn id="edit">Edit</TabBtn>
+      </div>
+      <div style={{padding:"22px 30px 30px",maxHeight:"56vh",overflow:"auto"}}>
+
+        {tab==="intel"&&<div className="fadeUp">
+          <div style={{display:"flex",gap:20,marginBottom:22}}>
+            <Ring value={o.fitScore} size={64} label="FIT"/>
+            <Ring value={o.urgencyScore} size={64} label="URGENCY"/>
+            <Ring value={o.valueScore} size={64} label="VALUE"/>
+            <Ring value={rankScore(o)} size={64} label="RANK"/>
+          </div>
+          <p style={{fontSize:14,color:"var(--bone-dim)",lineHeight:1.6,marginBottom:20}}>{o.description}</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+            <div>
+              <label>Why it fits</label>
+              {o.reasons.map((r,i)=><div key={i} style={{fontSize:12,color:"var(--cyan-bright)",padding:"4px 0",borderBottom:"1px solid #ffffff08"}}>+ {r}</div>)}
+              {!o.reasons.length&&<div style={{fontSize:12,color:"var(--bone-faint)"}}>—</div>}
+            </div>
+            <div>
+              <label>Warnings</label>
+              {o.warnings.map((r,i)=><div key={i} style={{fontSize:12,color:"var(--red-bright)",padding:"4px 0",borderBottom:"1px solid #ffffff08"}}>⚠ {r}</div>)}
+              {!o.warnings.length&&<div style={{fontSize:12,color:"var(--bone-faint)"}}>none</div>}
+            </div>
+          </div>
+          <div style={{marginTop:18}}>
+            <label>Urgency · {o.urgencyBucket}</label>
+            <div className="mono" style={{fontSize:11,color:"var(--bone-dim)"}}>{o.urgencyReasons.join(" · ")||"—"}</div>
+          </div>
+          <div style={{marginTop:14}}>
+            <label>Value signals</label>
+            <div className="mono" style={{fontSize:11,color:"var(--bone-dim)"}}>{o.valueReasons.join(" · ")||"—"}</div>
+          </div>
+          <div style={{marginTop:14}}>
+            <label>Automation · {o.automationStatus}</label>
+            <div className="mono" style={{fontSize:11,color:AUTO_COLOR[o.automationStatus]}}>{(o.autoReasons||[]).join(" · ")}</div>
+          </div>
+        </div>}
+
+        {tab==="packet"&&<div className="fadeUp">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div className="mono" style={{fontSize:11,color:"var(--bone-dim)"}}>{packet.summary}</div>
+            <Tag color={o.deadline?"var(--red-bright)":"var(--bone-dim)"}>due {fmtDate(packet.deadline)}</Tag>
+          </div>
+          <label>Required materials</label>
+          <div style={{marginBottom:16}}>
+            {packet.required.map((r,i)=><div key={i} style={{fontSize:13,color:"var(--bone-dim)",padding:"5px 0",borderBottom:"1px solid #ffffff08"}}>◦ {r}</div>)}
+          </div>
+          {packet.missing.length>0&&<div style={{marginBottom:16}}>
+            <label>Missing — you must supply</label>
+            {packet.missing.map((r,i)=><div key={i} style={{fontSize:13,color:"var(--red-bright)",padding:"4px 0"}}>✗ {r}</div>)}
+          </div>}
+          <label>Suggested assets (from your library)</label>
+          {packet.suggestedAssets.map(([k,v],i)=><div key={i} style={{marginBottom:10,padding:11,background:"var(--black)",border:"1px solid var(--line)"}}>
+            <div className="mono" style={{fontSize:9,color:"var(--gold)",letterSpacing:".1em",marginBottom:5}}>{k}</div>
+            <div style={{fontSize:12,color:"var(--bone-dim)",lineHeight:1.5}}>{v||"(not set — add in Profiles)"}</div>
+          </div>)}
+          <Btn kind="cyan" onClick={()=>copy([packet.summary,"REQUIRED:",...packet.required,"MISSING:",...packet.missing,"DRAFT:",packet.outreach].join("\n"),"pk")} style={{marginTop:10}}>{copied==="pk"?"copied ✓":"copy full packet"}</Btn>
+        </div>}
+
+        {tab==="outreach"&&<div className="fadeUp">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+            <div><label>Tone</label><select value={tone} onChange={e=>setTone(e.target.value)}>{TONES.map(t=><option key={t}>{t}</option>)}</select></div>
+            <div><label>Type</label><select value={kind} onChange={e=>setKind(e.target.value)}>
+              {["initial inquiry","booking pitch","vendor inquiry","mural proposal inquiry","follow-up","press kit send","thank-you"].map(t=><option key={t}>{t}</option>)}</select></div>
+          </div>
+          {o.contactEmail&&<div className="mono" style={{fontSize:11,color:"var(--cyan)",marginBottom:6}}>→ {o.contactEmail}</div>}
+          {o.contactSocial&&<div className="mono" style={{fontSize:11,color:"var(--violet-bright)",marginBottom:6}}>→ {o.contactSocial}</div>}
+          <textarea value={draft} readOnly rows={12} style={{fontFamily:"'Outfit',sans-serif",fontSize:13}}/>
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <Btn kind="gold" onClick={()=>copy(draft,"dr")}>{copied==="dr"?"copied ✓":"copy draft"}</Btn>
+            <Btn onClick={()=>{set("status","Contact Needed");onClose();}}>mark contacted</Btn>
+          </div>
+          <p className="mono" style={{fontSize:9,color:"var(--bone-faint)",marginTop:10,lineHeight:1.5}}>
+            Draft only — you review &amp; send from your own account. Nothing is sent automatically. Edit freely; never sends invented facts.
+          </p>
+        </div>}
+
+        {tab==="edit"&&<div className="fadeUp">
+          <Field label="Title"><input value={o.title} onChange={e=>set("title",e.target.value)}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Category"><select value={o.category} onChange={e=>set("category",e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></Field>
+            <Field label="City"><input value={o.city} onChange={e=>set("city",e.target.value)}/></Field>
+            <Field label="Event date"><input type="date" value={o.dateStart} onChange={e=>set("dateStart",e.target.value)}/></Field>
+            <Field label="Deadline"><input type="date" value={o.deadline} onChange={e=>set("deadline",e.target.value)}/></Field>
+            <Field label="Pay max $"><input type="number" value={o.payMax} onChange={e=>set("payMax",+e.target.value)}/></Field>
+            <Field label="Fee $"><input type="number" value={o.fee} onChange={e=>set("fee",+e.target.value)}/></Field>
+            <Field label="Contact email"><input value={o.contactEmail} onChange={e=>set("contactEmail",e.target.value)}/></Field>
+            <Field label="Contact social"><input value={o.contactSocial} onChange={e=>set("contactSocial",e.target.value)}/></Field>
+          </div>
+          <Field label="Application URL"><input value={o.applicationUrl} onChange={e=>set("applicationUrl",e.target.value)}/></Field>
+          <Field label="Description"><textarea rows={4} value={o.description} onChange={e=>set("description",e.target.value)}/></Field>
+          <Field label="Notes"><textarea rows={3} value={o.notes} onChange={e=>set("notes",e.target.value)}/></Field>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",textTransform:"none",letterSpacing:0,fontSize:12}}>
+            <input type="checkbox" checked={o.relationshipBoost} onChange={e=>set("relationshipBoost",e.target.checked)} style={{width:"auto"}}/> Existing relationship (boosts value)
+          </label>
+          <div style={{display:"flex",gap:8,marginTop:18}}>
+            <Btn kind="danger" onClick={()=>{if(confirm("Delete this opportunity?")){onDelete(o.id);onClose();}}}>delete</Btn>
+          </div>
+        </div>}
+      </div>
+
+      <div style={{borderTop:"1px solid var(--line)",padding:"14px 30px",display:"flex",gap:8,
+        alignItems:"center",flexWrap:"wrap",background:"var(--char2)"}}>
+        <label style={{margin:0}}>Stage</label>
+        <select value={o.status} onChange={e=>set("status",e.target.value)} style={{width:"auto",flex:1,minWidth:180}}>
+          {STAGES.map(s=><option key={s}>{s}</option>)}
+        </select>
+        {o.applicationUrl&&<Btn kind="cyan" onClick={()=>window.open(o.applicationUrl,"_blank")}>open application ↗</Btn>}
+      </div>
+    </Modal>
+  );
+}
+/* ============================================================
+   INTAKE MODAL  —  paste a flyer / caption / call
+   ============================================================ */
+
+function IntakeModal({onClose,onAdd}){
+  const [raw,setRaw]=useState("");
+  const [parsed,setParsed]=useState(null);
+  const go=()=>{ if(raw.trim().length<10)return; setParsed(parseIntake(raw)); };
+  return (
+    <Modal onClose={onClose} wide>
+      <div style={{padding:"26px 30px"}}>
+        <h2 className="serif" style={{fontSize:24,marginBottom:4}}>Paste the door</h2>
+        <p className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:18}}>
+          IG caption · flyer text · newsletter · open-call page · Discord post. Parser extracts what it can — never invents.
+        </p>
+        <textarea value={raw} onChange={e=>setRaw(e.target.value)} rows={7}
+          placeholder="Paste here — e.g. 'RITUAL // warehouse afters Sat July 12 @ The Annex, Hamtramck. Seeking dark/tribal selectors. DM @collective. free to apply'"/>
+        <div style={{display:"flex",gap:8,margintop:10,marginTop:12}}>
+          <Btn kind="gold" onClick={go}>parse</Btn>
+          {parsed&&<Btn kind="cyan" onClick={()=>{onAdd({...parsed,id:uid(),status:"Found",notes:"",createdAt:today(),lastCheckedAt:today(),sourceName:"Paste intake",state:"MI",country:"USA",relationshipBoost:false});onClose();}}>add to oracle ✓</Btn>}
+        </div>
+        {parsed&&<div className="fadeUp" style={{marginTop:20,padding:16,background:"var(--black)",border:"1px solid var(--line)"}}>
+          <div className="mono" style={{fontSize:9,color:"var(--gold)",marginBottom:10,letterSpacing:".1em"}}>
+            EXTRACTED: {parsed._found.join(" · ")||"minimal — edit after adding"}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px 18px",fontSize:12}}>
+            {[["Title",parsed.title],["Category",parsed.category],["City",parsed.city],
+              ["Event",parsed.dateStart],["Deadline",parsed.deadline],["Email",parsed.contactEmail],
+              ["Social",parsed.contactSocial],["Pay",parsed.payMax?"$"+parsed.payMax:""],
+              ["Fee",parsed.fee?"$"+parsed.fee:""],["Link",parsed.applicationUrl]]
+              .map(([k,v])=><div key={k}><span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{k}: </span><span style={{color:v?"var(--bone)":"var(--bone-faint)"}}>{v||"—"}</span></div>)}
+          </div>
+        </div>}
+      </div>
+    </Modal>
+  );
+}
+
+/* ============================================================
+   VIEWS
+   ============================================================ */
+
+/* ============================================================
+   TODAY  —  the open-the-PWA-and-know-what-to-do-now screen.
+   Loads first. Designed to deliver the headline in <3 seconds
+   of glance time, then offer 1-tap drilldown into specifics.
+   ============================================================ */
+
+function Today({open}){
+  const [data,setData]=useState(null);
+  const [refreshing,setRefreshing]=useState(false);
+  // "since" is per-device, stored in localStorage. Defaults to "yesterday" on
+  // first visit so the first open doesn't bury you in everything ever scanned.
+  const sinceRef=useRef(null);
+
+  const load=useCallback(async()=>{
+    const since=localStorage.getItem("oracle_last_open")
+      || new Date(Date.now()-24*3600e3).toISOString();
+    sinceRef.current=since;
+    const t=await API.get("/today?since="+encodeURIComponent(since));
+    setData(t);
+    // Mark "you've seen up to NOW" only after the user actually views the
+    // screen (give it a few seconds so a tap-and-bounce doesn't clear newSince).
+    setTimeout(()=>localStorage.setItem("oracle_last_open",new Date().toISOString()),3000);
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  const refresh=async()=>{
+    setRefreshing(true);
+    try{ await API.post("/scan"); }catch(e){}
+    await load();
+    setRefreshing(false);
+  };
+
+  if(!data) return (
+    <div style={{padding:"60px 20px",textAlign:"center"}}>
+      <div className="serif" style={{fontSize:22,color:"var(--gold)",animation:"glow 1.6s infinite"}}>reading…</div>
+    </div>
+  );
+
+  const {counts, prepUrgent, dueSoon, newSince}=data;
+  const total=counts.prepUrgent+counts.dueSoon+counts.newSince;
+  const sinceFmt=(()=>{
+    const s=sinceRef.current; if(!s) return "";
+    const hrs=Math.round((Date.now()-new Date(s).getTime())/3600000);
+    if(hrs<2) return "just now";
+    if(hrs<48) return `${hrs}h ago`;
+    return `${Math.round(hrs/24)}d ago`;
+  })();
+
+  /* — the headline at-a-glance card — large enough to read in 1 second — */
+  const Headline = () => (
+    <div style={{padding:"24px 22px",marginBottom:18,
+      background:total>0?"linear-gradient(180deg,#1d1916 0%,#14110f 100%)":"var(--char)",
+      border:`1px solid ${counts.prepUrgent>0?"#a8362e55":"var(--line)"}`}}>
+      <div className="mono" style={{fontSize:9,letterSpacing:".22em",color:"var(--bone-faint)",marginBottom:10}}>
+        SINCE YOU LAST OPENED · {sinceFmt}
+      </div>
+      {total===0
+        ? <div className="serif" style={{fontSize:24,color:"var(--bone-dim)",fontStyle:"italic"}}>The oracle is quiet. Nothing urgent.</div>
+        : <div>
+            <div className="serif" style={{fontSize:32,lineHeight:1.15,color:"var(--bone)",marginBottom:10}}>
+              {counts.prepUrgent>0 && <><span style={{color:"var(--red-bright)"}}>{counts.prepUrgent}</span> {counts.prepUrgent===1?"thing":"things"} need{counts.prepUrgent===1?"s":""} you now</>}
+              {counts.prepUrgent===0 && counts.dueSoon>0 && <><span style={{color:"var(--gold-bright)"}}>{counts.dueSoon}</span> deadline{counts.dueSoon===1?"":"s"} this week</>}
+              {counts.prepUrgent===0 && counts.dueSoon===0 && <><span style={{color:"var(--cyan-bright)"}}>{counts.newSince}</span> new since you last looked</>}
+            </div>
+            <div className="mono" style={{fontSize:11,color:"var(--bone-faint)",lineHeight:1.7}}>
+              {counts.prepUrgent>0 && <>· <span style={{color:"var(--red-bright)"}}>{counts.prepUrgent} prep window{counts.prepUrgent===1?"":"s"} open</span><br/></>}
+              {counts.dueSoon>0 && <>· <span style={{color:"var(--gold)"}}>{counts.dueSoon} deadline{counts.dueSoon===1?"":"s"} within 7 days</span><br/></>}
+              {counts.newSince>0 && <>· <span style={{color:"var(--cyan)"}}>{counts.newSince} new opportunit{counts.newSince===1?"y":"ies"}</span><br/></>}
+            </div>
+          </div>
+      }
+    </div>
+  );
+
+  const Lane=({title,note,items,accent})=> items.length>0 ? (
+    <div style={{marginBottom:22}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:5}}>
+        <h3 className="serif" style={{fontSize:18,color:accent}}>{title}</h3>
+        <span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{items.length}</span>
+      </div>
+      {note && <div className="mono" style={{fontSize:9,color:"var(--bone-faint)",marginBottom:10}}>{note}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:10}}>
+        {items.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div>
+      <Headline/>
+      <Lane title="Prep window open — work on these now" accent="var(--red-bright)"
+        note="Lead-time aware: the time you need to prepare these has arrived"
+        items={prepUrgent}/>
+      <Lane title="Deadlines within 7 days" accent="var(--gold-bright)"
+        items={dueSoon}/>
+      <Lane title="New since you last looked" accent="var(--cyan-bright)"
+        items={newSince}/>
+
+      <div style={{marginTop:24,display:"flex",alignItems:"center",gap:10,
+        paddingTop:18,borderTop:"1px solid var(--line)"}}>
+        <Btn onClick={refresh}>{refreshing?"scanning sources…":"⟳ scan now"}</Btn>
+        <span className="mono" style={{fontSize:9,color:"var(--bone-faint)",marginLeft:"auto"}}>
+          {counts.totalLive} live doors tracked · auto-scans hourly
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({opps,open}){
+  const groups=useMemo(()=>{
+    const live=opps.filter(o=>!["Archived","Declined"].includes(o.status));
+    const by=(f)=>live.filter(f).sort((a,b)=>rankScore(b)-rankScore(a));
+    return {
+      top:by(o=>o.fitScore>=55).slice(0,6),
+      urgent:by(o=>{const d=daysUntil(o.deadline);return d!=null&&d>=0&&d<=7;}),
+      ready:by(o=>o.status==="Ready for Review"||o.status==="Packet Needed"),
+      followups:by(o=>o.status==="Follow-Up"||o.status==="Contact Needed"),
+      dj:by(o=>/DJ|Ecstatic|Underground|Sound|Performance/.test(o.category)),
+      maker:by(o=>/Vendor|Mural|Public|Installation|Gallery|Art Fair/.test(o.category)),
+    };
+  },[opps]);
+  const Section=({title,items,accent})=> items.length?(
+    <div style={{marginBottom:30}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:12,marginBottom:13}}>
+        <h3 className="serif" style={{fontSize:21,color:accent||"var(--bone)"}}>{title}</h3>
+        <span className="mono" style={{fontSize:10,color:"var(--bone-faint)"}}>{items.length}</span>
+        <div style={{flex:1,height:1,background:"var(--line)"}}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:12}}>
+        {items.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+      </div>
+    </div>
+  ):null;
+  return (
+    <div>
+      <Section title="Urgent — deadline ≤ 7 days" items={groups.urgent} accent="var(--red-bright)"/>
+      <Section title="Top matches" items={groups.top} accent="var(--gold-bright)"/>
+      <Section title="Ready to prepare" items={groups.ready} accent="var(--cyan-bright)"/>
+      <Section title="DJ / sound leads" items={groups.dj}/>
+      <Section title="Maker / visual leads" items={groups.maker}/>
+      <Section title="Follow-ups due" items={groups.followups} accent="var(--violet-bright)"/>
+      {!opps.length&&<Empty/>}
+    </div>
+  );
+}
+
+function Empty(){return <div style={{textAlign:"center",padding:"80px 20px",color:"var(--bone-faint)"}}>
+  <div className="serif" style={{fontSize:26,marginBottom:8}}>The oracle is dark</div>
+  <div className="mono" style={{fontSize:11}}>Paste a door or add an opportunity to light it</div></div>;}
+
+function Search({opps,open}){
+  const [q,setQ]=useState(""),[cat,setCat]=useState("all"),[sort,setSort]=useState("rank");
+  const [hideUnpaid,setHU]=useState(false),[hideFee,setHF]=useState(false),[minFit,setMF]=useState(0);
+  const list=useMemo(()=>{
+    let r=opps.filter(o=>{
+      if(q&&!`${o.title} ${o.description} ${o.city} ${o.venueName}`.toLowerCase().includes(q.toLowerCase()))return false;
+      if(cat!=="all"&&o.category!==cat)return false;
+      if(hideUnpaid&&!(o.payMax>0))return false;
+      if(hideFee&&o.fee>0)return false;
+      if(o.fitScore<minFit)return false;
+      return true;
+    });
+    const s={rank:(a,b)=>rankScore(b)-rankScore(a),fit:(a,b)=>b.fitScore-a.fitScore,
+      urg:(a,b)=>b.urgencyScore-a.urgencyScore,val:(a,b)=>b.valueScore-a.valueScore,
+      deadline:(a,b)=>(a.deadline||"9999")>(b.deadline||"9999")?1:-1};
+    return r.sort(s[sort]);
+  },[opps,q,cat,sort,hideUnpaid,hideFee,minFit]);
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:10,marginBottom:14}}>
+        <input placeholder="search the radar…" value={q} onChange={e=>setQ(e.target.value)}/>
+        <select value={cat} onChange={e=>setCat(e.target.value)}><option value="all">all categories</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+        <select value={sort} onChange={e=>setSort(e.target.value)}>
+          <option value="rank">sort: rank</option><option value="fit">fit</option>
+          <option value="urg">urgency</option><option value="val">value</option><option value="deadline">deadline</option></select>
+      </div>
+      <div style={{display:"flex",gap:18,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
+        {[["hide unpaid",hideUnpaid,setHU],["hide fee-required",hideFee,setHF]].map(([l,v,s])=>
+          <label key={l} style={{display:"flex",gap:6,alignItems:"center",cursor:"pointer",textTransform:"none",letterSpacing:0,fontSize:11,margin:0}}>
+            <input type="checkbox" checked={v} onChange={e=>s(e.target.checked)} style={{width:"auto"}}/>{l}</label>)}
+        <label style={{display:"flex",gap:8,alignItems:"center",textTransform:"none",letterSpacing:0,fontSize:11,margin:0}}>
+          min fit {minFit}<input type="range" min="0" max="100" value={minFit} onChange={e=>setMF(+e.target.value)} style={{width:120,padding:0}}/></label>
+        <span className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginLeft:"auto"}}>{list.length} doors</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:12}}>
+        {list.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+      </div>
+      {!list.length&&<Empty/>}
+    </div>
+  );
+}
+
+function Pipeline({opps,open,onUpdate}){
+  const cols=STAGES.filter(s=>s!=="Archived");
+  return (
+    <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:20,height:"100%"}}>
+      {cols.map(stage=>{
+        const items=opps.filter(o=>o.status===stage).sort((a,b)=>rankScore(b)-rankScore(a));
+        return (
+          <div key={stage} style={{minWidth:260,flex:"0 0 260px"}}
+            onDragOver={e=>e.preventDefault()}
+            onDrop={e=>{const id=e.dataTransfer.getData("id");const o=opps.find(x=>x.id===id);if(o)onUpdate({...o,status:stage});}}>
+            <div className="mono" style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",
+              color:"var(--gold)",padding:"8px 0",borderBottom:"1px solid var(--line)",marginBottom:10,
+              display:"flex",justifyContent:"space-between"}}>
+              <span>{stage}</span><span style={{color:"var(--bone-faint)"}}>{items.length}</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {items.map(o=>(
+                <div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("id",o.id)}
+                  onClick={()=>open(o)} style={{background:"var(--char)",border:"1px solid var(--line)",
+                  padding:11,cursor:"grab"}}>
+                  <div className="serif" style={{fontSize:15,lineHeight:1.2,marginBottom:6}}>{o.title}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{o.city||"—"}</span>
+                    <span className="mono" style={{fontSize:9,color:"var(--gold)"}}>R{rankScore(o)}</span>
+                  </div>
+                  {o.deadline&&<div className="mono" style={{fontSize:9,color:"var(--red-bright)",marginTop:4}}>⌛{fmtDate(o.deadline)}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CRM({contacts,setContacts,opps}){
+  const [edit,setEdit]=useState(null);
+  const blank={id:"",name:"",organization:"",role:"",email:"",social:"",city:"",
+    relationship:"new lead",lastContacted:"",nextFollowUp:"",notes:""};
+  const REL=["new lead","contacted","responded","applied","accepted","declined","waitlisted","needs follow-up","booked","archived"];
+  const save=(c)=>{
+    setContacts(prev=> c.id&&prev.find(x=>x.id===c.id)
+      ? prev.map(x=>x.id===c.id?c:x) : [...prev,{...c,id:c.id||uid()}]);
+    setEdit(null);
+  };
+  return (
+    <div>
+      <Btn kind="gold" onClick={()=>setEdit({...blank})} style={{marginBottom:16}}>+ contact</Btn>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+        {contacts.map(c=>(
+          <div key={c.id} onClick={()=>setEdit(c)} style={{background:"var(--char)",border:"1px solid var(--line)",padding:14,cursor:"pointer"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <span className="serif" style={{fontSize:17}}>{c.name}</span>
+              <Tag color="var(--violet-bright)">{c.relationship}</Tag>
+            </div>
+            <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.7}}>
+              {c.organization&&<div>{c.organization} · {c.role}</div>}
+              {c.email&&<div style={{color:"var(--cyan)"}}>{c.email}</div>}
+              {c.social&&<div style={{color:"var(--violet-bright)"}}>{c.social}</div>}
+              {c.nextFollowUp&&<div style={{color:"var(--red-bright)"}}>follow up {fmtDate(c.nextFollowUp)}</div>}
+            </div>
+          </div>
+        ))}
+        {!contacts.length&&<div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>No contacts yet — add promoters, venues, curators as you find them.</div>}
+      </div>
+      {edit&&<Modal onClose={()=>setEdit(null)}><div style={{padding:"26px 30px"}}>
+        <h2 className="serif" style={{fontSize:22,marginBottom:16}}>{edit.id?"Edit":"New"} contact</h2>
+        {[["name","Name"],["organization","Organization"],["role","Role"],["email","Email"],["social","Social"],["city","City"]].map(([k,l])=>
+          <Field key={k} label={l}><input value={edit[k]} onChange={e=>setEdit({...edit,[k]:e.target.value})}/></Field>)}
+        <Field label="Relationship"><select value={edit.relationship} onChange={e=>setEdit({...edit,relationship:e.target.value})}>{REL.map(r=><option key={r}>{r}</option>)}</select></Field>
+        <Field label="Next follow-up"><input type="date" value={edit.nextFollowUp} onChange={e=>setEdit({...edit,nextFollowUp:e.target.value})}/></Field>
+        <Field label="Notes"><textarea rows={3} value={edit.notes} onChange={e=>setEdit({...edit,notes:e.target.value})}/></Field>
+        <div style={{display:"flex",gap:8}}>
+          <Btn kind="gold" onClick={()=>save(edit)}>save</Btn>
+          {edit.id&&<Btn kind="danger" onClick={()=>{setContacts(p=>p.filter(x=>x.id!==edit.id));setEdit(null);}}>delete</Btn>}
+        </div>
+      </div></Modal>}
+    </div>
+  );
+}
+
+function Profiles({profile,setProfile,assets,setAssets}){
+  const [p,setP]=useState(profile);
+  const [editA,setEditA]=useState(null);
+  useEffect(()=>setP(profile),[profile]);
+  const arr=(k)=>(p[k]||[]).join(", ");
+  const setArr=(k,v)=>setP({...p,[k]:v.split(",").map(s=>s.trim()).filter(Boolean)});
+  return (
+    <div style={{maxWidth:760}}>
+      <h3 className="serif" style={{fontSize:22,marginBottom:16}}>Artist profile</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Field label="Artist name"><input value={p.artistName} onChange={e=>setP({...p,artistName:e.target.value})}/></Field>
+        <Field label="Location"><input value={p.location} onChange={e=>setP({...p,location:e.target.value})}/></Field>
+        <Field label="Radius (mi)"><input type="number" value={p.radiusMiles} onChange={e=>setP({...p,radiusMiles:+e.target.value})}/></Field>
+        <Field label="Minimum pay $"><input type="number" value={p.minimumPay} onChange={e=>setP({...p,minimumPay:+e.target.value})}/></Field>
+      </div>
+      {[["types","Opportunity types"],["musicGenres","Music genres"],["artMediums","Art mediums"],
+        ["vibeKeywords","Vibe keywords"],["avoidKeywords","Avoid keywords"]].map(([k,l])=>
+        <Field key={k} label={l+" (comma-separated)"}><textarea rows={2} value={arr(k)} onChange={e=>setArr(k,e.target.value)}/></Field>)}
+      <Btn kind="gold" onClick={()=>setProfile(p)} style={{marginBottom:34}}>save profile</Btn>
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <h3 className="serif" style={{fontSize:22}}>Application profile library</h3>
+        <Btn onClick={()=>setEditA({id:"",type:"Short artist bio",content:""})}>+ asset</Btn>
+      </div>
+      {assets.map(a=>(
+        <div key={a.id} onClick={()=>setEditA(a)} style={{background:"var(--char)",border:"1px solid var(--line)",padding:13,marginBottom:9,cursor:"pointer"}}>
+          <div className="mono" style={{fontSize:9,color:"var(--gold)",letterSpacing:".1em",marginBottom:5}}>{a.type}</div>
+          <div style={{fontSize:12,color:"var(--bone-dim)",lineHeight:1.5}}>{a.content||"(empty)"}</div>
+        </div>
+      ))}
+      {editA&&<Modal onClose={()=>setEditA(null)}><div style={{padding:"26px 30px"}}>
+        <h2 className="serif" style={{fontSize:20,marginBottom:14}}>Asset</h2>
+        <Field label="Type"><input value={editA.type} onChange={e=>setEditA({...editA,type:e.target.value})}/></Field>
+        <Field label="Content"><textarea rows={6} value={editA.content} onChange={e=>setEditA({...editA,content:e.target.value})}/></Field>
+        <div style={{display:"flex",gap:8}}>
+          <Btn kind="gold" onClick={()=>{setAssets(prev=>editA.id&&prev.find(x=>x.id===editA.id)?prev.map(x=>x.id===editA.id?editA:x):[...prev,{...editA,id:uid()}]);setEditA(null);}}>save</Btn>
+          {editA.id&&<Btn kind="danger" onClick={()=>{setAssets(p=>p.filter(x=>x.id!==editA.id));setEditA(null);}}>delete</Btn>}
+        </div>
+      </div></Modal>}
+    </div>
+  );
+}
+
+function Digest({opps,open}){
+  const live=opps.filter(o=>!["Archived","Declined"].includes(o.status));
+  const rank=[...live].sort((a,b)=>rankScore(b)-rankScore(a));
+  const deadlines=live.filter(o=>{const d=daysUntil(o.deadline);return d!=null&&d>=0&&d<=14;}).sort((a,b)=>(a.deadline>b.deadline?1:-1));
+  const Block=({title,items,render})=>(
+    <div style={{marginBottom:26}}>
+      <h3 className="serif" style={{fontSize:19,color:"var(--gold)",marginBottom:10}}>{title}</h3>
+      {items.length?items.map(render):<div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>nothing this cycle</div>}
+    </div>
+  );
+  const row=(o)=>(<div key={o.id} onClick={()=>open(o)} style={{display:"flex",justifyContent:"space-between",
+    padding:"9px 0",borderBottom:"1px solid #ffffff0a",cursor:"pointer",fontSize:13}}>
+    <span style={{color:"var(--bone-dim)"}}>{o.title}</span>
+    <span className="mono" style={{fontSize:10,color:"var(--bone-faint)",whiteSpace:"nowrap",marginLeft:14}}>
+      {o.deadline?fmtDate(o.deadline):o.city} · R{rankScore(o)}</span></div>);
+  return (
+    <div style={{maxWidth:720}}>
+      <div className="serif" style={{fontSize:13,color:"var(--bone-faint)",marginBottom:24,fontStyle:"italic"}}>
+        Week of {fmtDate(today())} · {live.length} live doors
+      </div>
+      <Block title="Top 10 matches" items={rank.slice(0,10)} render={row}/>
+      <Block title="Deadlines ≤ 14 days" items={deadlines} render={row}/>
+      <Block title="Ready to prepare / submit" items={rank.filter(o=>["Packet Needed","Ready for Review"].includes(o.status))} render={row}/>
+      <Block title="Follow-ups due" items={rank.filter(o=>["Follow-Up","Contact Needed"].includes(o.status))} render={row}/>
+    </div>
+  );
+}
+
+/* ============================================================
+   APP SHELL  —  REST-connected (server scanner backend)
+   ============================================================ */
+
+const API = {
+  async get(p){ const r=await fetch("/api"+p); return r.json(); },
+  async post(p,b){ const r=await fetch("/api"+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}); return r.json(); },
+  async put(p,b){ const r=await fetch("/api"+p,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}); return r.json(); },
+  async del(p){ const r=await fetch("/api"+p,{method:"DELETE"}); return r.json(); },
+};
+
+const NAV=[
+  ["today","Today","◉"],["dash","Dashboard","◬"],["forecast","Forecast","☉"],
+  ["search","Search","⌖"],["pipe","Pipeline","▤"],["assist","Submission","✦"],
+  ["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],["crm","Contacts","◈"],
+  ["profile","Profiles","☥"],["digest","Digest","✶"]
+];
+
+function Broadcast(){
+  const [settings,setSettings]=useState(null);
+  const [roundup,setRoundup]=useState(null);
+  const [tab,setTab]=useState("instagram");
+  const [copied,setCopied]=useState("");
+  const [limit,setLimit]=useState(12);
+  const [busy,setBusy]=useState(false);
+  const [feedUrl,setFeedUrl]=useState("");
+
+  useEffect(()=>{(async()=>{
+    setSettings(await API.get("/settings"));
+    setFeedUrl(window.location.origin+"/feed");
+  })();},[]);
+
+  const generate=async()=>{
+    setBusy(true);
+    const r=await API.post("/broadcast",{limit:+limit});
+    setRoundup(r); setBusy(false);
+  };
+  const saveSettings=async(patch)=>{
+    const next=await API.put("/settings",patch);
+    setSettings(next);
+  };
+  const copy=(txt,id)=>{navigator.clipboard.writeText(txt);setCopied(id);setTimeout(()=>setCopied(""),1500);};
+
+  if(!settings) return <div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>loading…</div>;
+
+  const TabBtn=({id,label})=>(
+    <button onClick={()=>setTab(id)} className="mono" style={{fontSize:10,letterSpacing:".1em",
+      textTransform:"uppercase",padding:"9px 13px",background:"none",
+      color:tab===id?"var(--gold)":"var(--bone-faint)",
+      borderBottom:tab===id?"2px solid var(--gold)":"2px solid transparent"}}>{label}</button>
+  );
+
+  const current = roundup ? ({
+    instagram:roundup.instagram, plain:roundup.plain,
+    newsletter:roundup.newsletterText, html:roundup.newsletterHtml,
+  }[tab]) : "";
+
+  return (
+    <div style={{maxWidth:780}}>
+      <div style={{background:"var(--char)",border:"1px solid var(--line)",padding:"16px 20px",marginBottom:20}}>
+        <div className="serif" style={{fontSize:18,marginBottom:5}}>Turn your radar into a feed.</div>
+        <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6}}>
+          Generates ready-to-paste posts from your top scored opportunities — Instagram caption,
+          newsletter, plain text. Built off your real data, no AI cost. This is the front-end of
+          "{settings.brand}."
+        </div>
+      </div>
+
+      {/* brand settings */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+        <div>
+          <label>Brand name</label>
+          <input value={settings.brand} onChange={e=>setSettings({...settings,brand:e.target.value})}
+            onBlur={e=>saveSettings({brand:e.target.value})}/>
+        </div>
+        <div>
+          <label>Region label</label>
+          <input value={settings.region} onChange={e=>setSettings({...settings,region:e.target.value})}
+            onBlur={e=>saveSettings({region:e.target.value})}/>
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:18,flexWrap:"wrap"}}>
+        <label style={{margin:0,textTransform:"none",letterSpacing:0,fontSize:12,display:"flex",gap:8,alignItems:"center"}}>
+          include top
+          <input type="number" min="3" max="30" value={limit} onChange={e=>setLimit(e.target.value)}
+            style={{width:60}}/>
+          opportunities
+        </label>
+        <Btn kind="gold" onClick={generate}>{busy?"generating…":"⚡ generate roundup"}</Btn>
+      </div>
+
+      {roundup && <div className="fadeUp">
+        <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:10}}>
+          {roundup.meta.count} opportunities · {roundup.meta.groups.map(g=>`${g.label} (${g.count})`).join(" · ")}
+        </div>
+        <div style={{display:"flex",borderBottom:"1px solid var(--line)",marginBottom:12,flexWrap:"wrap"}}>
+          <TabBtn id="instagram" label="Instagram"/>
+          <TabBtn id="newsletter" label="Newsletter"/>
+          <TabBtn id="plain" label="Plain text"/>
+          <TabBtn id="html" label="Newsletter HTML"/>
+        </div>
+        <textarea readOnly value={current} rows={16}
+          style={{fontFamily:tab==="html"?"'Space Mono',monospace":"'Outfit',sans-serif",fontSize:12.5,lineHeight:1.5}}/>
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <Btn kind="gold" onClick={()=>copy(current,tab)}>{copied===tab?"copied ✓":"copy "+tab}</Btn>
+          <span className="mono" style={{fontSize:9,color:"var(--bone-faint)",alignSelf:"center"}}>
+            {tab==="instagram"&&"paste into IG caption · put real links in link-in-bio"}
+            {tab==="newsletter"&&"paste into Substack/email plain composer"}
+            {tab==="plain"&&"paste anywhere — Threads, Discord, notes"}
+            {tab==="html"&&"paste into Substack HTML / email-tool source view"}
+          </span>
+        </div>
+      </div>}
+
+      {/* public feed */}
+      <div style={{marginTop:34,paddingTop:20,borderTop:"1px solid var(--line)"}}>
+        <h3 className="serif" style={{fontSize:20,marginBottom:6}}>Public feed page</h3>
+        <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6,marginBottom:14}}>
+          A read-only page anyone can view — no login. The seed of a paid feed later.
+          When on, it shows your top 40 current opportunities at the URL below.
+        </div>
+        <label style={{display:"flex",gap:8,alignItems:"center",textTransform:"none",letterSpacing:0,fontSize:13,marginBottom:12}}>
+          <input type="checkbox" checked={!!settings.publicFeedEnabled}
+            onChange={e=>saveSettings({publicFeedEnabled:e.target.checked})} style={{width:"auto"}}/>
+          Public feed is {settings.publicFeedEnabled?"ON — anyone with the link can view":"OFF"}
+        </label>
+        {settings.publicFeedEnabled && <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input readOnly value={feedUrl} style={{flex:1}}/>
+          <Btn onClick={()=>copy(feedUrl,"url")}>{copied==="url"?"copied ✓":"copy link"}</Btn>
+          <Btn kind="cyan" onClick={()=>window.open(feedUrl,"_blank")}>open ↗</Btn>
+        </div>}
+      </div>
+    </div>
+  );
+}
+
+function Forecast({open}){
+  const [fc,setFc]=useState(null);
+  const [sources,setSources]=useState([]);
+  const [busy,setBusy]=useState("");
+  const load=useCallback(async()=>{
+    const [f,s]=await Promise.all([API.get("/forecast"),API.get("/sources")]);
+    setFc(f); setSources(s);
+  },[]);
+  useEffect(()=>{load();},[load]);
+  const sighting=async(s)=>{
+    setBusy(s.id);
+    const log=(s.postLog||[]).slice();
+    const t=today();
+    if(log[log.length-1]!==t) log.push(t);
+    await API.put("/sources/"+s.id,{postLog:log.slice(-30)});
+    await load(); setBusy("");
+  };
+  if(!fc) return <div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>reading the patterns…</div>;
+
+  const Lane=({title,note,children,accent})=>(
+    <div style={{marginBottom:30}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:12,marginBottom:6}}>
+        <h3 className="serif" style={{fontSize:21,color:accent||"var(--bone)"}}>{title}</h3>
+        <div style={{flex:1,height:1,background:"var(--line)"}}/>
+      </div>
+      <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:13,lineHeight:1.6}}>{note}</div>
+      {children}
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{background:"var(--char)",border:"1px solid var(--line)",padding:"16px 20px",marginBottom:26}}>
+        <div className="serif" style={{fontSize:18,marginBottom:5}}>Know before it happens.</div>
+        <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6}}>
+          Forecasts from history &amp; rhythm — not scraping. The web can't be scanned everywhere,
+          but patterns can be learned. Log a sighting when you spot an IG post; the rhythm sharpens over time.
+        </div>
+      </div>
+
+      <Lane title="Prep window open — work on these now" accent="var(--red-bright)"
+        note="Lead-time aware. These aren't due yet, but the time you need to prepare them has arrived. This is the 'don't find out too late' list.">
+        {fc.prepUrgent.length? 
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:11}}>
+            {fc.prepUrgent.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+          </div>
+          : <div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>nothing in a prep window yet</div>}
+      </Lane>
+
+      <Lane title="Recurring — predicted from past cycles" accent="var(--gold-bright)"
+        note="Things seen in prior years/seasons. Predicted next window ± a couple weeks. 'Watch from' gives you advance lead time before the call even reopens.">
+        {fc.recurrence.length?
+          <div style={{display:"grid",gap:9}}>
+            {fc.recurrence.map((r,i)=>(
+              <div key={i} style={{background:"var(--char)",border:"1px solid var(--line)",padding:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:12}}>
+                  <span className="serif" style={{fontSize:17}}>{r.title}</span>
+                  <Tag color={r.confidence==="pattern"?"var(--gold)":"var(--bone-faint)"}>{r.confidence}</Tag>
+                </div>
+                <div className="mono" style={{fontSize:10,color:"var(--bone-dim)",marginTop:6,lineHeight:1.7}}>
+                  <div>{r.category}{r.city?" · "+r.city:""}</div>
+                  <div>basis: {r.basis}</div>
+                  <div style={{color:"var(--gold)"}}>predicted ~{r.predictedWindow} · {r.daysOut}d out</div>
+                  <div style={{color:"var(--cyan)"}}>start watching {r.watchFrom}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          : <div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>no recurrence patterns yet — these build as opportunities age into history</div>}
+      </Lane>
+
+      <Lane title="Source rhythm — expect a drop soon" accent="var(--violet-bright)"
+        note="Per-source cadence. Works on IG/FB sources because it predicts WHEN to check, not the content. Tap 'logged a sighting' whenever you see one of these post — the rhythm gets sharper.">
+        <div style={{display:"grid",gap:9}}>
+          {sources.map(s=>{
+            const c=fc.cadence.find(x=>x.source===s.name);
+            return (
+              <div key={s.id} style={{background:"var(--char)",border:"1px solid var(--line)",
+                padding:13,display:"flex",alignItems:"center",gap:14}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div className="serif" style={{fontSize:16}}>{s.name}</div>
+                  <div className="mono" style={{fontSize:10,marginTop:4,
+                    color:c?(c.overdue?"var(--red-bright)":c.actionable?"var(--gold)":"var(--bone-faint)"):"var(--bone-faint)"}}>
+                    {c? c.note : "need ≥2 logged sightings to predict rhythm"}
+                  </div>
+                </div>
+                <Btn size="s" onClick={()=>sighting(s)}>{busy===s.id?"…":"logged a sighting"}</Btn>
+              </div>
+            );
+          })}
+        </div>
+      </Lane>
+    </div>
+  );
+}
+
+function Sources({sources,reload,onScan,scanning}){
+  const [adding,setAdding]=useState(null);
+  const [bridging,setBridging]=useState(null); // {source, url}
+  const blank={name:"",type:"website",url:"",city:"",categories:"",
+    tier:2,bridgeNeeded:0,handle:"",expectedCadence:14,notes:"",enabled:1};
+
+  const save=async(s)=>{
+    if(s.id) await API.put("/sources/"+s.id,s);
+    else await API.post("/sources",s);
+    setAdding(null); reload();
+  };
+  const toggleEnabled=async(s)=>{
+    await API.put("/sources/"+s.id,{...s,enabled:s.enabled?0:1});
+    reload();
+  };
+  const saveBridge=async()=>{
+    if(!bridging.url.trim()) return;
+    await API.put("/sources/"+bridging.source.id,{
+      ...bridging.source, url:bridging.url.trim(), enabled:1
+    });
+    setBridging(null); reload();
+  };
+
+  const tiers = [
+    [1,"Ritual / Ecstatic / DJ","var(--gold-bright)","Your primary booking tier — conscious dance and ritual collectives"],
+    [2,"Underground / Afters / Venues","var(--violet-bright)","Clubs, collectives, warehouses — where afters and selector slots come from"],
+    [3,"Vendor / Makers Markets","var(--cyan-bright)","ArtofDreamwalker tier — juried markets and craft fairs"],
+    [4,"Festival / Burn / Immersive","var(--gold)","Lakes of Fire, regional burns, transformational festivals"],
+    [5,"Gallery / Public Art / Grants","var(--bone)","Slower lane — calls, RFQs, residencies"],
+  ];
+  const grouped = tiers.map(([t,...rest])=>[t,...rest,sources.filter(s=>(s.tier||2)===t)]);
+  const ungrouped = sources.filter(s=>!s.tier);
+
+  const bridgeReady = sources.filter(s=>s.bridgeNeeded&&!s.url).length;
+  const totalEnabled = sources.filter(s=>s.enabled).length;
+
+  const Row = ({s})=>{
+    const needsBridge = s.bridgeNeeded && !s.url;
+    return (
+      <div style={{background:"var(--char)",border:`1px solid ${needsBridge?"#7c5ba655":"var(--line)"}`,
+        padding:13,display:"flex",alignItems:"center",gap:12}}>
+        <button onClick={()=>toggleEnabled(s)} title={s.enabled?"enabled — click to disable":"disabled — click to enable"}
+          style={{width:14,height:14,borderRadius:"50%",border:"1px solid var(--line)",
+          background:s.enabled?"var(--green)":"transparent",flexShrink:0,padding:0,cursor:"pointer"}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:4}}>
+            <span className="serif" style={{fontSize:15}}>{s.name}</span>
+            {s.handle&&<span className="mono" style={{fontSize:10,color:"var(--violet-bright)"}}>{s.handle}</span>}
+            {needsBridge&&<Tag color="var(--violet-bright)">needs bridge feed</Tag>}
+            {!s.bridgeNeeded&&!needsBridge&&<Tag color={s.type==="rss"?"var(--cyan)":"var(--gold)"}>{s.type}</Tag>}
+          </div>
+          <div className="mono" style={{fontSize:9,color:"var(--bone-faint)",lineHeight:1.6}}>
+            {s.city||"any city"}
+            {s.expectedCadence&&<span> · expect every ~{s.expectedCadence}d</span>}
+            {s.lastChecked&&<span> · checked {s.lastChecked.slice(0,10)}</span>}
+            {s.lastStatus&&<span style={{color:s.lastStatus==="ok"?"var(--green)":"var(--red)"}}> · {s.lastStatus}</span>}
+          </div>
+          {s.notes&&<div style={{fontSize:11,color:"var(--bone-dim)",marginTop:5,lineHeight:1.45}}>{s.notes}</div>}
+        </div>
+        {needsBridge
+          ? <Btn size="s" kind="cyan" onClick={()=>setBridging({source:s,url:""})}>paste feed URL</Btn>
+          : <Btn size="s" onClick={()=>setAdding(s)}>edit</Btn>}
+        <Btn size="s" kind="danger" onClick={async()=>{if(confirm("Delete "+s.name+"?")){await API.del("/sources/"+s.id);reload();}}}>×</Btn>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+        <Btn kind="gold" onClick={onScan}>{scanning?"scanning…":"⟳ scan all sources now"}</Btn>
+        <Btn onClick={()=>setAdding({...blank})}>+ add source</Btn>
+        <span className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginLeft:"auto"}}>
+          {totalEnabled} of {sources.length} enabled
+          {bridgeReady>0&&<span style={{color:"var(--violet-bright)"}}> · {bridgeReady} need bridge feeds</span>}
+        </span>
+      </div>
+
+      {bridgeReady>0 && (
+        <div style={{background:"#7c5ba622",border:"1px solid #7c5ba655",padding:"13px 16px",marginBottom:18}}>
+          <div className="serif" style={{fontSize:15,color:"var(--violet-bright)",marginBottom:5}}>
+            Bridge-feed setup
+          </div>
+          <div className="mono" style={{fontSize:10,color:"var(--bone-dim)",lineHeight:1.7}}>
+            {bridgeReady} IG/FB accounts are waiting for a bridge feed URL. Use rss.app or Inoreader
+            to turn each public account into an RSS feed, then click "paste feed URL" on the row.
+            See <b style={{color:"var(--violet-bright)"}}>IG-BRIDGE-SETUP.md</b> in the repo for the step-by-step.
+          </div>
+        </div>
+      )}
+
+      {grouped.map(([tier,label,color,note,items])=> items.length>0 && (
+        <div key={tier} style={{marginBottom:24}}>
+          <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:5}}>
+            <h3 className="serif" style={{fontSize:19,color}}>Tier {tier} · {label}</h3>
+            <span className="mono" style={{fontSize:10,color:"var(--bone-faint)"}}>{items.length}</span>
+            <div style={{flex:1,height:1,background:"var(--line)"}}/>
+          </div>
+          <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:10}}>{note}</div>
+          <div style={{display:"grid",gap:8}}>{items.map(s=><Row key={s.id} s={s}/>)}</div>
+        </div>
+      ))}
+
+      {ungrouped.length>0 && (
+        <div style={{marginBottom:24}}>
+          <h3 className="serif" style={{fontSize:19,marginBottom:10}}>Other</h3>
+          <div style={{display:"grid",gap:8}}>{ungrouped.map(s=><Row key={s.id} s={s}/>)}</div>
+        </div>
+      )}
+
+      {bridging && <Modal onClose={()=>setBridging(null)}><div style={{padding:"26px 30px"}}>
+        <h2 className="serif" style={{fontSize:20,marginBottom:6}}>Bridge feed for {bridging.source.name}</h2>
+        <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:14,lineHeight:1.6}}>
+          1. Open rss.app → New Feed → Instagram User Feed<br/>
+          2. Paste this handle: <b style={{color:"var(--violet-bright)"}}>{bridging.source.handle||"(no handle set — edit source first)"}</b><br/>
+          3. Copy the rss.app feed URL it generates<br/>
+          4. Paste it below
+        </div>
+        <Field label="RSS feed URL from your bridge service"><input value={bridging.url}
+          onChange={e=>setBridging({...bridging,url:e.target.value})}
+          placeholder="https://rss.app/feeds/..."/></Field>
+        <div style={{display:"flex",gap:8}}>
+          <Btn kind="gold" onClick={saveBridge}>save & enable</Btn>
+          <Btn onClick={()=>setBridging(null)}>cancel</Btn>
+        </div>
+      </div></Modal>}
+
+      {adding&&<Modal onClose={()=>setAdding(null)}><div style={{padding:"26px 30px"}}>
+        <h2 className="serif" style={{fontSize:20,marginBottom:14}}>{adding.id?"Edit":"New"} source</h2>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Field label="Name"><input value={adding.name} onChange={e=>setAdding({...adding,name:e.target.value})}/></Field>
+          <Field label="Tier (1-5)"><input type="number" min="1" max="5" value={adding.tier||2} onChange={e=>setAdding({...adding,tier:+e.target.value})}/></Field>
+        </div>
+        <Field label="Type"><select value={adding.type} onChange={e=>setAdding({...adding,type:e.target.value})}>
+          <option value="website">website (best-effort)</option><option value="rss">rss (cleanest)</option></select></Field>
+        <Field label="URL (or rss.app feed URL for IG/FB)"><input value={adding.url} onChange={e=>setAdding({...adding,url:e.target.value})} placeholder="https://…"/></Field>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Field label="City"><input value={adding.city} onChange={e=>setAdding({...adding,city:e.target.value})}/></Field>
+          <Field label="Handle (IG @ etc)"><input value={adding.handle||""} onChange={e=>setAdding({...adding,handle:e.target.value})}/></Field>
+        </div>
+        <Field label="Categories (comma)"><input value={adding.categories} onChange={e=>setAdding({...adding,categories:e.target.value})}/></Field>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Field label="Expected cadence (days)"><input type="number" value={adding.expectedCadence||14} onChange={e=>setAdding({...adding,expectedCadence:+e.target.value})}/></Field>
+          <Field label="Notes"><input value={adding.notes||""} onChange={e=>setAdding({...adding,notes:e.target.value})}/></Field>
+        </div>
+        <label style={{display:"flex",gap:8,alignItems:"center",textTransform:"none",letterSpacing:0,fontSize:12,marginBottom:8}}>
+          <input type="checkbox" checked={!!adding.bridgeNeeded} onChange={e=>setAdding({...adding,bridgeNeeded:e.target.checked?1:0})} style={{width:"auto"}}/> IG/FB — needs bridge feed</label>
+        {adding.id&&<label style={{display:"flex",gap:8,alignItems:"center",textTransform:"none",letterSpacing:0,fontSize:12,marginBottom:14}}>
+          <input type="checkbox" checked={!!adding.enabled} onChange={e=>setAdding({...adding,enabled:e.target.checked?1:0})} style={{width:"auto"}}/> enabled</label>}
+        <Btn kind="gold" onClick={()=>save(adding)}>save</Btn>
+      </div></Modal>}
+    </div>
+  );
+}
+
+function App(){
+  const [loaded,setLoaded]=useState(false);
+  const [view,setView]=useState("today");
+  const [opps,setOpps]=useState([]);
+  const [profile,setProfileState]=useState(null);
+  const [assets,setAssets]=useState([]);
+  const [contacts,setContacts]=useState([]);
+  const [sources,setSources]=useState([]);
+  const [selected,setSelected]=useState(null);
+  const [showIntake,setShowIntake]=useState(false);
+  const [scanning,setScanning]=useState(false);
+  const [toast,setToast]=useState("");
+
+  const loadOpps=useCallback(async()=>setOpps(await API.get("/opportunities")),[]);
+  const loadSources=useCallback(async()=>setSources(await API.get("/sources")),[]);
+
+  useEffect(()=>{(async()=>{
+    const [p,a,c,s,o]=await Promise.all([
+      API.get("/profile"),API.get("/assets"),API.get("/contacts"),
+      API.get("/sources"),API.get("/opportunities")
+    ]);
+    setProfileState(p); setAssets(a); setContacts(c); setSources(s); setOpps(o);
+    setLoaded(true);
+  })();},[]);
+
+  const flash=(m)=>{setToast(m);setTimeout(()=>setToast(""),3500);};
+
+  const scan=async()=>{
+    setScanning(true); flash("Scanning sources… (polite + throttled, ~30-90s)");
+    try{
+      const r=await API.post("/scan");
+      const added=r.report.reduce((n,x)=>n+(x.added||0),0);
+      await loadOpps(); await loadSources();
+      flash(`Scan complete — ${added} new door${added===1?"":"s"} found`);
+    }catch(e){ flash("Scan failed — check server logs"); }
+    setScanning(false);
+  };
+
+  const updateOpp=async(o)=>{ const u=await API.put("/opportunities/"+o.id,o);
+    setOpps(prev=>prev.map(x=>x.id===u.id?u:x)); };
+  const delOpp=async(id)=>{ await API.del("/opportunities/"+id);
+    setOpps(prev=>prev.filter(x=>x.id!==id)); };
+  const addOpp=async(o)=>{ const n=await API.post("/opportunities",o);
+    setOpps(prev=>[n,...prev]); return n; };
+  const addParsed=async(p)=>{ await addOpp(p); flash("Added to the oracle"); };
+  const setProfile=async(p)=>{ await API.put("/profile",p); setProfileState(p);
+    await loadOpps(); flash("Profile saved — everything re-scored"); };
+  const saveAssets=async(next)=>{
+    setAssets(next);
+    // diff-free simple approach: server has its own asset endpoints; here we just
+    // PUT/POST individually when edited via Profiles (handled below)
+  };
+
+  if(!loaded||!profile) return <div style={{height:"100vh",display:"flex",
+    alignItems:"center",justifyContent:"center"}}>
+    <div className="serif" style={{fontSize:24,color:"var(--gold)",animation:"glow 1.6s infinite"}}>opening the oracle…</div></div>;
+
+  const urgentCount=opps.filter(o=>{const d=daysUntil(o.deadline);
+    return d!=null&&d>=0&&d<=7&&!["Archived","Declined"].includes(o.status);}).length;
+
+  // Profiles view needs server-backed asset CRUD
+  const AssetBackedProfiles=()=>(
+    <Profiles profile={profile}
+      setProfile={setProfile}
+      assets={assets}
+      setAssets={async(updater)=>{
+        const next=typeof updater==="function"?updater(assets):updater;
+        // figure out adds/edits/deletes vs current
+        const cur=new Map(assets.map(a=>[a.id,a]));
+        for(const a of next){
+          if(!a.id||!cur.has(a.id)){ const made=await API.post("/assets",{type:a.type,content:a.content}); }
+          else { const o=cur.get(a.id); if(o.type!==a.type||o.content!==a.content) await API.put("/assets/"+a.id,{type:a.type,content:a.content}); }
+        }
+        for(const [id] of cur){ if(!next.find(n=>n.id===id)) await API.del("/assets/"+id); }
+        setAssets(await API.get("/assets"));
+      }}/>
+  );
+
+  const ContactBacked=()=>(
+    <CRM contacts={contacts} opps={opps}
+      setContacts={async(updater)=>{
+        const next=typeof updater==="function"?updater(contacts):updater;
+        const cur=new Map(contacts.map(c=>[c.id,c]));
+        for(const c of next){
+          if(!c.id||!cur.has(c.id)) await API.post("/contacts",c);
+          else await API.put("/contacts/"+c.id,c);
+        }
+        for(const [id] of cur){ if(!next.find(n=>n.id===id)) await API.del("/contacts/"+id); }
+        setContacts(await API.get("/contacts"));
+      }}/>
+  );
+
+  return (
+    <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
+      <div style={{width:208,flexShrink:0,background:"var(--char)",borderRight:"1px solid var(--line)",
+        display:"flex",flexDirection:"column",padding:"22px 0"}}>
+        <div style={{padding:"0 22px 22px"}}>
+          <div className="serif" style={{fontSize:23,lineHeight:1}}>Opportunity</div>
+          <div className="serif" style={{fontSize:23,color:"var(--gold)"}}>Oracle</div>
+          <div className="mono" style={{fontSize:8,color:"var(--bone-faint)",letterSpacing:".22em",marginTop:6}}>
+            {profile.artistName.toUpperCase()} · SCANNER</div>
+        </div>
+        <div style={{flex:1}}>
+          {NAV.map(([k,label,ic])=>(
+            <button key={k} onClick={()=>setView(k)} style={{width:"100%",textAlign:"left",
+              padding:"11px 22px",display:"flex",alignItems:"center",gap:12,
+              background:view===k?"var(--char3)":"none",
+              borderLeft:view===k?"2px solid var(--gold)":"2px solid transparent",
+              color:view===k?"var(--bone)":"var(--bone-faint)",fontSize:13}}>
+              <span style={{color:view===k?"var(--gold)":"var(--bone-faint)",fontSize:14,width:16}}>{ic}</span>
+              {label}
+              {k==="today"&&urgentCount>0&&<span className="mono" style={{marginLeft:"auto",
+                fontSize:9,color:"var(--black)",background:"var(--red-bright)",padding:"1px 6px"}}>{urgentCount}</span>}
+            </button>
+          ))}
+        </div>
+        <div style={{padding:"16px 18px 0"}}>
+          <Btn kind="gold" onClick={scan} style={{width:"100%"}}>{scanning?"scanning…":"⟳ scan now"}</Btn>
+          <Btn onClick={()=>setShowIntake(true)} style={{width:"100%",marginTop:8}}>⟡ paste a door</Btn>
+          <button onClick={async()=>{const n=await addOpp({});setSelected(n);}} className="mono"
+            style={{width:"100%",marginTop:8,fontSize:10,color:"var(--bone-faint)",padding:"8px",
+            border:"1px solid var(--line)",letterSpacing:".1em"}}>+ MANUAL ADD</button>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflow:"auto",padding:"30px 36px"}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:26}}>
+          <h1 className="serif" style={{fontSize:30,fontWeight:500}}>{NAV.find(n=>n[0]===view)[1]}</h1>
+          <span className="mono" style={{fontSize:10,color:"var(--bone-faint)"}}>
+            {opps.length} doors · {sources.filter(s=>s.enabled).length} live sources · {fmtDate(today())}</span>
+        </div>
+        {view==="today"&&<Today open={setSelected}/>}
+        {view==="dash"&&<Dashboard opps={opps} open={setSelected}/>}
+        {view==="forecast"&&<Forecast open={setSelected}/>}
+        {view==="broadcast"&&<Broadcast/>}
+        {view==="search"&&<Search opps={opps} open={setSelected}/>}
+        {view==="pipe"&&<Pipeline opps={opps} open={setSelected} onUpdate={updateOpp}/>}
+        {view==="assist"&&<Assistant opps={opps} open={setSelected}/>}
+        {view==="sources"&&<Sources sources={sources} reload={loadSources} onScan={scan} scanning={scanning}/>}
+        {view==="crm"&&<ContactBacked/>}
+        {view==="profile"&&<AssetBackedProfiles/>}
+        {view==="digest"&&<Digest opps={opps} open={setSelected}/>}
+      </div>
+
+      {selected&&<OppDetail o={opps.find(x=>x.id===selected.id)||selected}
+        profile={profile} assets={assets} onClose={()=>setSelected(null)}
+        onUpdate={updateOpp} onDelete={delOpp}/>}
+      {showIntake&&<IntakeModal onClose={()=>setShowIntake(false)} onAdd={addParsed}/>}
+      {toast&&<div className="fadeUp" style={{position:"fixed",bottom:24,left:"50%",
+        transform:"translateX(-50%)",background:"var(--char3)",border:"1px solid var(--gold)",
+        color:"var(--bone)",padding:"12px 22px",fontSize:13,zIndex:2000,fontFamily:"'Space Mono',monospace"}}>{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

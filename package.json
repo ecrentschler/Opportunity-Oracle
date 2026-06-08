@@ -1,0 +1,21 @@
+{
+  "name": "opportunity-oracle-server",
+  "version": "1.0.0",
+  "description": "Autonomous opportunity scanner for underground artists",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "start:local": "node --env-file-if-exists=.env src/server.js",
+    "scan": "node --env-file-if-exists=.env src/jobs/runScan.js",
+    "digest": "node --env-file-if-exists=.env src/jobs/runDigest.js",
+    "dev": "node --env-file-if-exists=.env --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.16",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": { "node": ">=20" }
+}

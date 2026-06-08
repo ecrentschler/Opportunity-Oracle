@@ -1,0 +1,6 @@
+node_modules/
+oracle-data.json
+oracle-data.json.tmp
+.env
+*.log
+.DS_Store
