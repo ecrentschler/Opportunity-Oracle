@@ -88,6 +88,86 @@
   @keyframes scan{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
   .fadeUp{animation:fadeUp .4s ease both}
   .scanline{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.3;animation:scan 7s linear infinite;pointer-events:none}
+  /* ============================================================
+   MOBILE LAYOUT  —  drawer sidebar + full-width content on phones
+   Desktop (>820px) is unchanged. Phone (<=820px) collapses the
+   sidebar into a slide-out drawer opened by the ☰ button.
+   ============================================================ */
+
+/* the hamburger button is hidden on desktop, shown on mobile */
+.menu-btn{ display:none; }
+
+/* dark overlay behind the open drawer (mobile only) */
+.drawer-scrim{ display:none; }
+
+@media (max-width:820px){
+  /* show the hamburger */
+  .menu-btn{
+    display:flex; align-items:center; justify-content:center;
+    position:fixed; top:calc(env(safe-area-inset-top) + 10px); left:12px;
+    z-index:1100; width:42px; height:42px;
+    background:var(--char2); border:1px solid var(--line);
+    color:var(--gold); font-size:20px; line-height:1;
+  }
+
+  /* the sidebar becomes an off-canvas drawer */
+  .oracle-sidebar{
+    position:fixed; top:0; bottom:0; left:0;
+    z-index:1090;
+    transform:translateX(-100%);
+    transition:transform .25s ease;
+    box-shadow:none;
+    width:255px !important;
+    padding-top:calc(env(safe-area-inset-top) + 18px) !important;
+  }
+  /* when open, slide it in */
+  .oracle-sidebar.open{
+    transform:translateX(0);
+    box-shadow:0 0 40px #000c;
+  }
+
+  /* scrim appears when drawer is open */
+  .drawer-scrim.show{
+    display:block; position:fixed; inset:0; z-index:1080;
+    background:#000a;
+  }
+
+  /* content takes the full width; add top room for the ☰ button */
+  .oracle-content{
+    padding:64px 16px 28px !important;
+  }
+
+  /* the page header row: stack it so the meta line doesn't crush the title */
+  .oracle-content > .page-head{
+    flex-direction:column !important;
+    align-items:flex-start !important;
+    gap:4px;
+  }
+
+  /* CARD GRIDS: on phones, force a single comfortable column.
+     Auto-targets every grid inside the content area so you don't have
+     to hand-edit each one. The desktop minmax(330-340px) is wider than
+     a phone, which is what was squishing everything. */
+  .oracle-content [style*="grid-template-columns"]{
+    grid-template-columns:1fr !important;
+  }
+
+  /* modals: use the full screen on phones instead of a centered box */
+  .oracle-modal-wrap{
+    padding:0 !important; align-items:stretch !important;
+  }
+  .oracle-modal-wrap > div{
+    max-width:100% !important; min-height:100vh;
+  }
+  /* modal internal two-column grids stack on phones (score rings, edit form) */
+  .oracle-modal-wrap [style*="grid-template-columns"]{
+    grid-template-columns:1fr !important;
+  }
+  /* the score-ring row in the detail modal: let it wrap instead of overflowing */
+  .oracle-modal-wrap [style*="display:flex"][style*="gap:20"]{
+    flex-wrap:wrap;
+  }
+}
 </style>
 </head>
 <body>
@@ -562,8 +642,8 @@ function Btn({children,onClick,kind="ghost",size="m",style={}}){
 
 function Modal({children,onClose,wide}){
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"#000000d8",zIndex:1000,
-      display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",overflow:"auto"}}>
+   <div onClick={onClose} className="oracle-modal-wrap" style={{position:"fixed",inset:0,background:"#000000d8",zIndex:1000,
+display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",overflow:"auto"}}>
       <div onClick={e=>e.stopPropagation()} className="fadeUp" style={{background:"var(--char)",
         border:"1px solid var(--line)",maxWidth:wide?900:560,width:"100%",position:"relative"}}>
         <div className="scanline"/>
@@ -1175,7 +1255,27 @@ const NAV=[
   ["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],["crm","Contacts","◈"],
   ["profile","Profiles","☥"],["digest","Digest","✶"]
 ];
-
+function Assistant({opps,open}){
+const ready=opps.filter(o=>["Packet Needed","Ready for Review","Contact Needed","Found","Saved"].includes(o.status))
+.sort((a,b)=>rankScore(b)-rankScore(a));
+return (
+<div>
+<div style={{background:"var(--char)",border:"1px solid var(--line)",padding:"16px 20px",marginBottom:20}}>
+<div className="serif" style={{fontSize:18,marginBottom:5}}>Submission assistant</div>
+<div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6}}>
+Opportunities to act on. Tap one, then use its Outreach & Packet tabs to draft and prep.
+</div>
+</div>
+{ready.length? (
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:12}}>
+{ready.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+</div>
+) : <div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>
+Nothing staged yet. Open any opportunity and use its Outreach / Packet tabs.
+</div>}
+</div>
+);
+}
 function Broadcast(){
   const [settings,setSettings]=useState(null);
   const [roundup,setRoundup]=useState(null);
@@ -1548,7 +1648,8 @@ function Sources({sources,reload,onScan,scanning}){
 
 function App(){
   const [loaded,setLoaded]=useState(false);
-  const [view,setView]=useState("today");
+  const [view,setView]=useState("today");const [view,setView]=useState("today");
+const [drawerOpen,setDrawerOpen]=useState(false);
   const [opps,setOpps]=useState([]);
   const [profile,setProfileState]=useState(null);
   const [assets,setAssets]=useState([]);
@@ -1640,8 +1741,10 @@ function App(){
 
   return (
     <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      <div style={{width:208,flexShrink:0,background:"var(--char)",borderRight:"1px solid var(--line)",
-        display:"flex",flexDirection:"column",padding:"22px 0"}}>
+     <button className="menu-btn" onClick={()=>setDrawerOpen(o=>!o)} aria-label="menu">☰</button>
+<div className={"drawer-scrim"+(drawerOpen?" show":"")} onClick={()=>setDrawerOpen(false)}/>
+<div className={"oracle-sidebar"+(drawerOpen?" open":"")} style={{width:208,flexShrink:0,background:"var(--char)",borderRight:"1px solid var(--line)",
+display:"flex",flexDirection:"column",padding:"22px 0"}}>
         <div style={{padding:"0 22px 22px"}}>
           <div className="serif" style={{fontSize:23,lineHeight:1}}>Opportunity</div>
           <div className="serif" style={{fontSize:23,color:"var(--gold)"}}>Oracle</div>
@@ -1650,7 +1753,7 @@ function App(){
         </div>
         <div style={{flex:1}}>
           {NAV.map(([k,label,ic])=>(
-            <button key={k} onClick={()=>setView(k)} style={{width:"100%",textAlign:"left",
+            <button key={k} onClick={()=>{setView(k);setDrawerOpen(false);}} style={{width:"100%",textAlign:"left",
               padding:"11px 22px",display:"flex",alignItems:"center",gap:12,
               background:view===k?"var(--char3)":"none",
               borderLeft:view===k?"2px solid var(--gold)":"2px solid transparent",
@@ -1671,8 +1774,8 @@ function App(){
         </div>
       </div>
 
-      <div style={{flex:1,overflow:"auto",padding:"30px 36px"}}>
-        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:26}}>
+      <div className="oracle-content" style={{flex:1,overflow:"auto",padding:"30px 36px"}}>
+<div className="page-head" style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:26}}>
           <h1 className="serif" style={{fontSize:30,fontWeight:500}}>{NAV.find(n=>n[0]===view)[1]}</h1>
           <span className="mono" style={{fontSize:10,color:"var(--bone-faint)"}}>
             {opps.length} doors · {sources.filter(s=>s.enabled).length} live sources · {fmtDate(today())}</span>
