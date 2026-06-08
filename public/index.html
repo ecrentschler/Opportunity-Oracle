@@ -788,9 +788,10 @@ function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
         </div>
         <h2 className="serif" style={{fontSize:28,fontWeight:500,lineHeight:1.15,marginBottom:6}}>{o.title}</h2>
         <div className="mono" style={{fontSize:11,color:"var(--bone-faint)",marginBottom:18}}>
-          {o.city||"location TBD"} · {o.venueName||o.organizationName||"—"} · rank {rankScore(o)}
-        </div>
-      </div>
+      {o.city||"location TBD"} · {o.venueName||o.organizationName||"—"} · rank {rankScore(o)}
+    </div>
+    <ConfidenceBadge o={o} onUpdate={onUpdate}/>
+  </div>
       <div style={{display:"flex",borderBottom:"1px solid var(--line)",padding:"0 18px",overflowX:"auto"}}>
         <TabBtn id="intel">Intel</TabBtn>
         <TabBtn id="packet">Packet</TabBtn>
