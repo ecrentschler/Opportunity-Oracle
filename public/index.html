@@ -424,58 +424,58 @@ if(isExpired(o)) return "expired";
 if(isAttendOnly(o)) return "event";
 return "opportunity";
 }
-  /* ---------- red flags, verdict, scan modes (Bucket 1) ---------- /
+ /* ---------- red flags, verdict, scan modes (Bucket 1) ---------- */
 function detectRedFlags(o){
-const flags=[]; const blob=${o.title||""} ${o.description||""}.toLowerCase();
-if(/sell tickets|ticket sales required|must sell|presale quota|fill the room/.test(blob)) flags.push({level:"high",text:"Artist-funded event — you must sell tickets to play"});
-if(/pay to play|purchase a slot|pay for your slot/.test(blob)) flags.push({level:"high",text:"Pay-to-play structure"});
-if(/(exposure|for the exposure|build your brand)/.test(blob)&&!(o.payMax>0)) flags.push({level:"medium",text:"Exposure-only — no pay mentioned"});
-if(/(all rights|we own|perpetual license|unlimited use|royalty-free forever)/.test(blob)) flags.push({level:"high",text:"Possible rights grab — check usage terms"});
-if(o.fee>0&&!(o.payMax>0)&&o.fee>=30) flags.push({level:"medium",text:$${o.fee} fee with no stated pay/prize});
-if(o.fee>0&&o.payMax>0&&o.fee>o.payMax0.5) flags.push({level:"medium",text:Fee ($${o.fee}) is steep vs pay ($${o.payMax})});
-if(!o.applicationUrl&&!o.contactEmail&&!o.contactSocial) flags.push({level:"low",text:"No application path or contact found"});
-if(/DJ|set|selector|perform|gig|booking/i.test(o.category||"")&&!(o.payMax>0)&&!/door split|tips|guarantee/.test(blob)) flags.push({level:"medium",text:"Gig with no clear compensation"});
-return flags;
+  const flags=[]; const blob=`${o.title||""} ${o.description||""}`.toLowerCase();
+  if(/sell tickets|ticket sales required|must sell|presale quota|fill the room/.test(blob)) flags.push({level:"high",text:"Artist-funded event — you must sell tickets to play"});
+  if(/pay to play|purchase a slot|pay for your slot/.test(blob)) flags.push({level:"high",text:"Pay-to-play structure"});
+  if(/(exposure|for the exposure|build your brand)/.test(blob)&&!(o.payMax>0)) flags.push({level:"medium",text:"Exposure-only — no pay mentioned"});
+  if(/(all rights|we own|perpetual license|unlimited use|royalty-free forever)/.test(blob)) flags.push({level:"high",text:"Possible rights grab — check usage terms"});
+  if(o.fee>0&&!(o.payMax>0)&&o.fee>=30) flags.push({level:"medium",text:`$${o.fee} fee with no stated pay/prize`});
+  if(o.fee>0&&o.payMax>0&&o.fee>o.payMax*0.5) flags.push({level:"medium",text:`Fee ($${o.fee}) is steep vs pay ($${o.payMax})`});
+  if(!o.applicationUrl&&!o.contactEmail&&!o.contactSocial) flags.push({level:"low",text:"No application path or contact found"});
+  if(/DJ|set|selector|perform|gig|booking/i.test(o.category||"")&&!(o.payMax>0)&&!/door split|tips|guarantee/.test(blob)) flags.push({level:"medium",text:"Gig with no clear compensation"});
+  return flags;
 }
 function worthMyEnergy(o,flags){
-const highFlags=flags.filter(f=>f.level==="high").length;
-const rank=o.rankScore!=null?o.rankScore:0;
-const paid=(o.payMax||0)>0;
-if(highFlags>0) return {verdict:"No",color:"var(--red-bright)",reason:flags.find(f=>f.level==="high").text};
-if((o.fitScore||0)<35) return {verdict:"No",color:"var(--red-bright)",reason:"Weak fit for your work"};
-if(rank>=65&&(o.fitScore||0)>=55&&(paid||(o.valueScore||0)>=55)&&flags.length===0) return {verdict:"Yes",color:"var(--cyan-bright)",reason:paid?"Strong fit, real pay, clean terms":"Strong fit and career value, clean terms"};
-const why=[]; if(!paid)why.push("no pay listed"); if(flags.some(f=>f.level==="medium"))why.push(flags.find(f=>f.level==="medium").text.toLowerCase()); if((o.fitScore||0)<55)why.push("fit is moderate");
-return {verdict:"Maybe",color:"var(--gold)",reason:why.slice(0,2).join(" · ")||"decent fit, check the details"};
+  const highFlags=flags.filter(f=>f.level==="high").length;
+  const rank=o.rankScore!=null?o.rankScore:0;
+  const paid=(o.payMax||0)>0;
+  if(highFlags>0) return {verdict:"No",color:"var(--red-bright)",reason:flags.find(f=>f.level==="high").text};
+  if((o.fitScore||0)<35) return {verdict:"No",color:"var(--red-bright)",reason:"Weak fit for your work"};
+  if(rank>=65&&(o.fitScore||0)>=55&&(paid||(o.valueScore||0)>=55)&&flags.length===0) return {verdict:"Yes",color:"var(--cyan-bright)",reason:paid?"Strong fit, real pay, clean terms":"Strong fit and career value, clean terms"};
+  const why=[]; if(!paid)why.push("no pay listed"); if(flags.some(f=>f.level==="medium"))why.push(flags.find(f=>f.level==="medium").text.toLowerCase()); if((o.fitScore||0)<55)why.push("fit is moderate");
+  return {verdict:"Maybe",color:"var(--gold)",reason:why.slice(0,2).join(" · ")||"decent fit, check the details"};
 }
 const SCAN_MODES={
-all:{label:"All",desc:"everything on the radar"},
-money:{label:"Money",desc:"paid: grants, commissions, paid gigs"},
-nofee:{label:"No-Fee",desc:"free to apply / enter"},
-local:{label:"Local",desc:"within your radius"},
-quick:{label:"Quick Win",desc:"deadline soon"},
-dj:{label:"DJ Gig",desc:"bookings, sets, nightlife"},
-ritual:{label:"Ritual/Wellness",desc:"ecstatic, sound journeys"},
-vendor:{label:"Vendor",desc:"markets, fairs, booths"},
-publicart:{label:"Public Art",desc:"RFQs, murals, commissions"},
-prestige:{label:"Prestige",desc:"residencies, grants"},
-weird:{label:"Weird Fit",desc:"occult, surreal, immersive"},
+  all:{label:"All",desc:"everything on the radar"},
+  money:{label:"Money",desc:"paid: grants, commissions, paid gigs"},
+  nofee:{label:"No-Fee",desc:"free to apply / enter"},
+  local:{label:"Local",desc:"within your radius"},
+  quick:{label:"Quick Win",desc:"deadline soon"},
+  dj:{label:"DJ Gig",desc:"bookings, sets, nightlife"},
+  ritual:{label:"Ritual/Wellness",desc:"ecstatic, sound journeys"},
+  vendor:{label:"Vendor",desc:"markets, fairs, booths"},
+  publicart:{label:"Public Art",desc:"RFQs, murals, commissions"},
+  prestige:{label:"Prestige",desc:"residencies, grants"},
+  weird:{label:"Weird Fit",desc:"occult, surreal, immersive"},
 };
 function applyScanMode(opps,mode,profile){
-const radius=(profile&&profile.radiusMiles)||60;
-const blob=(o)=>${o.title||""} ${o.description||""} ${o.category||""}.toLowerCase();
-switch(mode){
-case "money": return opps.filter(o=>(o.payMax||0)>0||/grant|commission|award|residency|stipend|fellowship/i.test(o.category||""));
-case "nofee": return opps.filter(o=>!(o.fee>0));
-case "local": return opps.filter(o=>{const d=distMiles(o.city,profile&&profile.location);return d==null||d<=radius;});
-case "quick": return opps.filter(o=>{const d=daysUntil(o.deadline);return d!=null&&d>=0&&d<=10;});
-case "dj": return opps.filter(o=>/DJ|Live Performance|Underground|Sound|Nightlife|Ecstatic/i.test(o.category||""));
-case "ritual": return opps.filter(o=>/Ecstatic|Movement|Sound|Wellness|Ritual/i.test(o.category||"")||/ecstatic|sound journey|breathwork|somatic|cacao|ritual/.test(blob(o)));
-case "vendor": return opps.filter(o=>/Vendor|Market|Art Fair/i.test(o.category||""));
-case "publicart": return opps.filter(o=>/Public Art|Mural|Installation/i.test(o.category||""));
-case "prestige": return opps.filter(o=>/Residency|Grant|Fellowship/i.test(o.category||"")||(o.valueScore||0)>=65);
-case "weird": return opps.filter(o=>/occult|ritual|surreal|immersive|pagan|esoteric|sacred|shaman|tribal|mystic/.test(blob(o)));
-default: return opps;
-}
+  const radius=(profile&&profile.radiusMiles)||60;
+  const blob=(o)=>`${o.title||""} ${o.description||""} ${o.category||""}`.toLowerCase();
+  switch(mode){
+    case "money": return opps.filter(o=>(o.payMax||0)>0||/grant|commission|award|residency|stipend|fellowship/i.test(o.category||""));
+    case "nofee": return opps.filter(o=>!(o.fee>0));
+    case "local": return opps.filter(o=>{const d=distMiles(o.city,profile&&profile.location);return d==null||d<=radius;});
+    case "quick": return opps.filter(o=>{const d=daysUntil(o.deadline);return d!=null&&d>=0&&d<=10;});
+    case "dj": return opps.filter(o=>/DJ|Live Performance|Underground|Sound|Nightlife|Ecstatic/i.test(o.category||""));
+    case "ritual": return opps.filter(o=>/Ecstatic|Movement|Sound|Wellness|Ritual/i.test(o.category||"")||/ecstatic|sound journey|breathwork|somatic|cacao|ritual/.test(blob(o)));
+    case "vendor": return opps.filter(o=>/Vendor|Market|Art Fair/i.test(o.category||""));
+    case "publicart": return opps.filter(o=>/Public Art|Mural|Installation/i.test(o.category||""));
+    case "prestige": return opps.filter(o=>/Residency|Grant|Fellowship/i.test(o.category||"")||(o.valueScore||0)>=65);
+    case "weird": return opps.filter(o=>/occult|ritual|surreal|immersive|pagan|esoteric|sacred|shaman|tribal|mystic/.test(blob(o)));
+    default: return opps;
+  }
 }
 const WEIGHTS = {fit:.45,urgency:.25,value:.20,rel:.10};
 function rankScore(o){
