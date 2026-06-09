@@ -391,7 +391,28 @@ function enrich(opp, profile){
     ...classifyAutomation(o)
   };
 }
-
+/* ---------- bucketing: opportunity vs event vs expired ---------- */
+const SUBMITTABLE_CAT = /DJ Booking|Festival|Vendor|Art Fair|Mural|Public Art|Gallery|Installation|Residency|Grant|Workshop|Sound Artist|Projection|Venue Lead/i;
+function isExpired(o){
+const dl=daysUntil(o.deadline), ev=daysUntil(o.dateStart);
+if(dl!=null) return dl<0;        // deadline passed
+if(ev!=null) return ev<-1;       // event was >1 day ago
+return false;                     // no dates → never auto-expires
+}
+function isAttendOnly(o){
+if(o.kindOverride==="opportunity") return false;  // you marked it actionable
+if(o.kindOverride==="event") return true;          // you marked it attend-only
+const hasPath = !!(o.applicationUrl||o.contactEmail||o.contactSocial);
+if(hasPath) return false;
+if(SUBMITTABLE_CAT.test(o.category||"")) return false;
+return true;
+}
+function bucketOf(o){
+if(["Archived","Declined"].includes(o.status)) return "hidden";
+if(isExpired(o)) return "expired";
+if(isAttendOnly(o)) return "event";
+return "opportunity";
+}
 const WEIGHTS = {fit:.45,urgency:.25,value:.20,rel:.10};
 function rankScore(o){
   const rel = o.relationshipBoost?70:35;
@@ -891,6 +912,13 @@ function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",textTransform:"none",letterSpacing:0,fontSize:12}}>
             <input type="checkbox" checked={o.relationshipBoost} onChange={e=>set("relationshipBoost",e.target.checked)} style={{width:"auto"}}/> Existing relationship (boosts value)
           </label>
+          <Field label="Type override (which lane it lives in)">
+        <select value={o.kindOverride||"auto"} onChange={e=>set("kindOverride",e.target.value==="auto"?"":e.target.value)}>
+          <option value="auto">Auto-detect</option>
+          <option value="opportunity">Force: Opportunity (something to apply/pitch to)</option>
+          <option value="event">Force: Event (just attend)</option>
+        </select>
+      </Field>
           <div style={{display:"flex",gap:8,marginTop:18}}>
             <Btn kind="danger" onClick={()=>{if(confirm("Delete this opportunity?")){onDelete(o.id);onClose();}}}>delete</Btn>
           </div>
@@ -1061,8 +1089,8 @@ function Today({open}){
 
 function Dashboard({opps,open}){
   const groups=useMemo(()=>{
-    const live=opps.filter(o=>!["Archived","Declined"].includes(o.status));
-    const by=(f)=>live.filter(f).sort((a,b)=>rankScore(b)-rankScore(a));
+    const live=opps.filter(o=>bucketOf(o)==="opportunity");
+const by=(f)=>live.filter(f).sort((a,b)=>rankScore(b)-rankScore(a));
     return {
       top:by(o=>o.fitScore>=55).slice(0,6),
       urgent:by(o=>{const d=daysUntil(o.deadline);return d!=null&&d>=0&&d<=7;}),
@@ -1308,11 +1336,53 @@ const API = {
 };
 
 const NAV=[
-  ["today","Today","◉"],["dash","Dashboard","◬"],["forecast","Forecast","☉"],
-  ["search","Search","⌖"],["pipe","Pipeline","▤"],["assist","Submission","✦"],
-  ["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],["crm","Contacts","◈"],
-  ["profile","Profiles","☥"],["digest","Digest","✶"]
+["today","Today","◉"],["dash","Dashboard","◬"],["forecast","Forecast","☉"],
+["search","Search","⌖"],["pipe","Pipeline","▤"],["assist","Submission","✦"],
+["events","Events","◷"],["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],
+["expired","Expired","⊘"],["crm","Contacts","◈"],
+["profile","Profiles","☥"],["digest","Digest","✶"]
 ];
+  function Events({opps,open}){
+const items=opps.filter(o=>bucketOf(o)==="event")
+.sort((a,b)=>{const da=daysUntil(a.dateStart),db=daysUntil(b.dateStart);
+if(da==null)return 1; if(db==null)return -1; return da-db;});
+return (
+<div>
+<div style={{background:"var(--char)",border:"1px solid var(--line)",padding:"16px 20px",marginBottom:20}}>
+<div className="serif" style={{fontSize:18,marginBottom:5}}>Events to attend</div>
+<div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6}}>
+Things happening that you can show up to — no application, just presence. Good for
+networking and scouting. Kept out of your main opportunity pile.
+</div>
+</div>
+{items.length?(
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:12}}>
+{items.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+</div>
+):<div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>No upcoming attend-only events right now.</div>}
+</div>
+);
+}
+function Expired({opps,open}){
+const items=opps.filter(o=>bucketOf(o)==="expired")
+.sort((a,b)=>{const ka=a.deadline||a.dateStart||"",kb=b.deadline||b.dateStart||"";return ka<kb?1:-1;});
+return (
+<div>
+<div style={{background:"var(--char)",border:"1px solid var(--line)",padding:"16px 20px",marginBottom:20}}>
+<div className="serif" style={{fontSize:18,marginBottom:5}}>Expired & past</div>
+<div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6}}>
+Deadlines that passed or events already over. Auto-hidden from your active lists.
+Kept here for reference or to catch a recurring one next cycle.
+</div>
+</div>
+{items.length?(
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:12,opacity:.7}}>
+{items.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+</div>
+):<div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>Nothing expired. Clean slate.</div>}
+</div>
+);
+}
 function Assistant({opps,open}){
 const ready=opps.filter(o=>["Packet Needed","Ready for Review","Contact Needed","Found","Saved"].includes(o.status))
 .sort((a,b)=>rankScore(b)-rankScore(a));
@@ -1845,6 +1915,8 @@ display:"flex",flexDirection:"column",padding:"22px 0"}}>
         {view==="search"&&<Search opps={opps} open={setSelected}/>}
         {view==="pipe"&&<Pipeline opps={opps} open={setSelected} onUpdate={updateOpp}/>}
         {view==="assist"&&<Assistant opps={opps} open={setSelected}/>}
+    {view==="events"&&<Events opps={opps} open={setSelected}/>}
+    {view==="expired"&&<Expired opps={opps} open={setSelected}/>}
         {view==="sources"&&<Sources sources={sources} reload={loadSources} onScan={scan} scanning={scanning}/>}
         {view==="crm"&&<ContactBacked/>}
         {view==="profile"&&<AssetBackedProfiles/>}
