@@ -812,11 +812,6 @@ function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
       textTransform:"uppercase",padding:"10px 14px",background:"none",
       color:tab===id?"var(--gold)":"var(--bone-faint)",
       borderBottom:tab===id?"2px solid var(--gold)":"2px solid transparent"}}>{children}</button>
-    <button onClick={handleArchive} className="mono"
-      style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 10px",
-      border:"1px solid #a8362e55",background:"transparent",color:"var(--red-bright)",cursor:"pointer"}}>
-      archive ⊘
-    </button>
   );
 
   return (
