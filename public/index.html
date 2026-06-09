@@ -393,11 +393,21 @@ function enrich(opp, profile){
 }
 /* ---------- bucketing: opportunity vs event vs expired ---------- */
 const SUBMITTABLE_CAT = /DJ Booking|Festival|Vendor|Art Fair|Mural|Public Art|Gallery|Installation|Residency|Grant|Workshop|Sound Artist|Projection|Venue Lead/i;
+function latestYearInText(text){
+const m=(text||"").match(/\b(20[2-9]\d)\b/g);   // years 2020-2099
+if(!m) return null;
+return Math.max(...m.map(Number));
+}
 function isExpired(o){
 const dl=daysUntil(o.deadline), ev=daysUntil(o.dateStart);
 if(dl!=null) return dl<0;        // deadline passed
 if(ev!=null) return ev<-1;       // event was >1 day ago
-return false;                     // no dates → never auto-expires
+// No date fields — but if the title/text mentions ONLY a past year
+// (e.g. "Movement 2025"), treat it as expired. The LATEST year wins, so
+// "applications for 2027" is protected and stays active.
+const y=latestYearInText(${o.title||""} ${o.description||""});
+if(y!=null && y < new Date().getFullYear()) return true;
+return false;
 }
 function isAttendOnly(o){
 if(o.kindOverride==="opportunity") return false;  // you marked it actionable
@@ -708,6 +718,11 @@ await API.post("/opportunities/"+o.id+"/verify",{verified:newVerified});
 onUpdate({...o, verified:newVerified, verifiedAt:newVerified?new Date().toISOString():""});
 }finally{ setBusy(false); }
 };
+  const handleArchive=()=>{
+if(confirm("Archive this? It moves to Expired and leaves your active lists. You can bring it back later via the Stage dropdown.")){
+onUpdate({...o, status:"Archived"});
+}
+};
 return (
 <div style={{background:"var(--char2)",border:"1px solid var(--line)",
 padding:"12px 14px",marginBottom:14,borderLeft:"3px solid "+bandColor}}>
@@ -797,6 +812,11 @@ function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
       textTransform:"uppercase",padding:"10px 14px",background:"none",
       color:tab===id?"var(--gold)":"var(--bone-faint)",
       borderBottom:tab===id?"2px solid var(--gold)":"2px solid transparent"}}>{children}</button>
+    <button onClick={handleArchive} className="mono"
+      style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 10px",
+      border:"1px solid #a8362e55",background:"transparent",color:"var(--red-bright)",cursor:"pointer"}}>
+      archive ⊘
+    </button>
   );
 
   return (
