@@ -405,7 +405,7 @@ if(ev!=null) return ev<-1;       // event was >1 day ago
 // No date fields — but if the title/text mentions ONLY a past year
 // (e.g. "Movement 2025"), treat it as expired. The LATEST year wins, so
 // "applications for 2027" is protected and stays active.
-const y=latestYearInText(${o.title||""} ${o.description||""});
+const y=latestYearInText(`${o.title||""} ${o.description||""}`);
 if(y!=null && y < new Date().getFullYear()) return true;
 return false;
 }
