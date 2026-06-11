@@ -1507,7 +1507,7 @@ Nothing staged yet. Open any opportunity and use its Outreach / Packet tabs.
 );
 }
   
-/* ---------- Weekly Agent Briefing ---------- /
+/* ---------- Weekly Agent Briefing ---------- */
 function pitchAngleOf(o){
 const dj=/DJ|Live Performance|Underground|Sound|Ecstatic|Festival/i.test(o.category||"");
 const art=/Vendor|Art Fair|Mural|Public Art|Gallery|Installation|Residency|Grant|Workshop|Community Art|Publication|Award/i.test(o.category||"");
@@ -1529,12 +1529,12 @@ const longshots=ranked.filter(o=>(o.valueScore||0)>=65&&(o.fitScore||0)<55).slic
 const djPitch=ranked.filter(o=>pitchAngleOf(o)==="DJ").slice(0,4);
 const artPitch=ranked.filter(o=>pitchAngleOf(o)==="artist").slice(0,4);
 const followups=live.filter(o=>["Follow-Up","Contact Needed"].includes(o.status));
-const cutoff=new Date(Date.now()-1486400000).toISOString().slice(0,10);
+const cutoff=new Date(Date.now()-14*86400000).toISOString().slice(0,10);
 const stale=live.filter(o=>["Saved","Researching","Packet Needed"].includes(o.status)&&(o.createdAt||"")<cutoff);
 const actions=[];
 const dl0=deadlines[0];
 if(dl0){const d=daysUntil(dl0.deadline);actions.push({txt:'Work on "'+dl0.title+'" — deadline in '+d+' day'+(d===1?'':'s'),o:dl0});}
-if(followups[0])actions.push({txt:'Send the follow-up for "'+followups[0].title+'"',o:followups});
+if(followups[0])actions.push({txt:'Send the follow-up for "'+followups[0].title+'"',o:followups[0]});
 const e0=easy.find(o=>o!==dl0);
 if(e0)actions.push({txt:'Easy win: open "'+e0.title+'" and start the packet',o:e0});
 const t0=top5.find(o=>o!==dl0&&o!==e0);
