@@ -1436,7 +1436,8 @@ const API = {
 };
 
 const NAV=[
-["today","Today","◉"],["dash","Dashboard","◬"],["forecast","Forecast","☉"],
+["today","Today","◉"],["brief","Briefing","✴"],["dash","Dashboard","◬"],
+["forecast","Forecast","☉"],
 ["search","Search","⌖"],["pipe","Pipeline","▤"],["assist","Submission","✦"],
 ["events","Events","◷"],["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],
 ["expired","Expired","⊘"],["crm","Contacts","◈"],
@@ -1483,6 +1484,7 @@ Kept here for reference or to catch a recurring one next cycle.
 </div>
 );
 }
+  
 function Assistant({opps,open}){
 const ready=opps.filter(o=>["Packet Needed","Ready for Review","Contact Needed","Found","Saved"].includes(o.status))
 .sort((a,b)=>rankScore(b)-rankScore(a));
@@ -1504,6 +1506,91 @@ Nothing staged yet. Open any opportunity and use its Outreach / Packet tabs.
 </div>
 );
 }
+  
+/* ---------- Weekly Agent Briefing ---------- /
+function pitchAngleOf(o){
+const dj=/DJ|Live Performance|Underground|Sound|Ecstatic|Festival/i.test(o.category||"");
+const art=/Vendor|Art Fair|Mural|Public Art|Gallery|Installation|Residency|Grant|Workshop|Community Art|Publication|Award/i.test(o.category||"");
+if(dj&&art) return "both";
+if(dj) return "DJ";
+if(art) return "artist";
+return "either";
+}
+function Briefing({opps,open}){
+const B=useMemo(()=>{
+const live=opps.filter(o=>bucketOf(o)==="opportunity");
+const notApplied=live.filter(o=>!["Applied / Submitted","Follow-Up","Accepted"].includes(o.status));
+const ranked=[...notApplied].sort((a,b)=>rankScore(b)-rankScore(a));
+const top5=ranked.slice(0,5);
+const deadlines=live.filter(o=>{const d=daysUntil(o.deadline);return d!=null&&d>=0&&d<=14;})
+.sort((a,b)=>(a.deadline>b.deadline?1:-1));
+const easy=ranked.filter(o=>(o.fitScore||0)>=55&&!(o.fee>0)&&(o.applicationUrl||o.contactEmail)&&detectRedFlags(o).filter(f=>f.level==="high").length===0).slice(0,5);
+const longshots=ranked.filter(o=>(o.valueScore||0)>=65&&(o.fitScore||0)<55).slice(0,4);
+const djPitch=ranked.filter(o=>pitchAngleOf(o)==="DJ").slice(0,4);
+const artPitch=ranked.filter(o=>pitchAngleOf(o)==="artist").slice(0,4);
+const followups=live.filter(o=>["Follow-Up","Contact Needed"].includes(o.status));
+const cutoff=new Date(Date.now()-1486400000).toISOString().slice(0,10);
+const stale=live.filter(o=>["Saved","Researching","Packet Needed"].includes(o.status)&&(o.createdAt||"")<cutoff);
+const actions=[];
+const dl0=deadlines[0];
+if(dl0){const d=daysUntil(dl0.deadline);actions.push({txt:'Work on "'+dl0.title+'" — deadline in '+d+' day'+(d===1?'':'s'),o:dl0});}
+if(followups[0])actions.push({txt:'Send the follow-up for "'+followups[0].title+'"',o:followups});
+const e0=easy.find(o=>o!==dl0);
+if(e0)actions.push({txt:'Easy win: open "'+e0.title+'" and start the packet',o:e0});
+const t0=top5.find(o=>o!==dl0&&o!==e0);
+if(actions.length<3&&t0)actions.push({txt:'Pitch "'+t0.title+'" — your top-ranked open door',o:t0});
+return {top5,deadlines,easy,longshots,djPitch,artPitch,followups,stale,actions};
+},[opps]);
+const Lane=({title,note,items,accent})=> items.length>0?(
+<div style={{marginBottom:26}}>
+<div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:5}}>
+<h3 className="serif" style={{fontSize:19,color:accent||"var(--bone)"}}>{title}</h3>
+<span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{items.length}</span>
+<div style={{flex:1,height:1,background:"var(--line)"}}/>
+</div>
+{note&&<div className="mono" style={{fontSize:9,color:"var(--bone-faint)",marginBottom:10}}>{note}</div>}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:10}}>
+{items.map(o=><OppCard key={o.id} o={o} onOpen={open}/>)}
+</div>
+</div>
+):null;
+return (
+<div>
+<div style={{background:"linear-gradient(180deg,#1d1916 0%,#14110f 100%)",
+border:"1px solid var(--gold)",padding:"20px 22px",marginBottom:24}}>
+<div className="mono" style={{fontSize:9,letterSpacing:".22em",color:"var(--gold)",marginBottom:10}}>
+YOUR MANAGER'S NOTES · WEEK OF {fmtDate(today())}
+</div>
+{B.actions.length?(
+<div>
+<div className="serif" style={{fontSize:22,marginBottom:12}}>Do these today:</div>
+{B.actions.map((a,i)=>(
+<div key={i} onClick={()=>open(a.o)} style={{display:"flex",gap:10,padding:"8px 0",
+borderBottom:"1px solid #ffffff0a",cursor:"pointer",alignItems:"baseline"}}>
+<span className="mono" style={{color:"var(--gold)",fontSize:13}}>{i+1}.</span>
+<span style={{fontSize:14,color:"var(--bone)"}}>{a.txt}</span>
+</div>
+))}
+</div>
+):<div className="serif" style={{fontSize:20,fontStyle:"italic",color:"var(--bone-dim)"}}>
+Quiet week. Scan for new doors or add sources.
+</div>}
+</div>
+<Lane title="Your 5 best moves" accent="var(--gold-bright)"
+     note="Highest-ranked open doors you haven't applied to" items={B.top5}/>
+<Lane title="Deadlines closing (14 days)" accent="var(--red-bright)" items={B.deadlines}/>
+<Lane title="Easy wins" accent="var(--cyan-bright)"
+     note="Good fit · free to apply · clear path — low effort, real return" items={B.easy}/>
+<Lane title="High-value long shots" accent="var(--violet-bright)"
+     note="Big value even if fit is moderate — worth one good pitch" items={B.longshots}/>
+<Lane title="Pitch as DJ" items={B.djPitch}/>
+<Lane title="Pitch as artist" items={B.artPitch}/>
+<Lane title="Follow-ups due" accent="var(--violet-bright)" items={B.followups}/>
+<Lane title="Going stale — decide or archive" accent="var(--bone-faint)"
+     note="Started 14+ days ago and untouched. Finish them or let them go." items={B.stale}/>
+</div>
+);
+}  
 function Broadcast(){
   const [settings,setSettings]=useState(null);
   const [roundup,setRoundup]=useState(null);
@@ -2009,7 +2096,8 @@ display:"flex",flexDirection:"column",padding:"22px 0"}}>
             {opps.length} doors · {sources.filter(s=>s.enabled).length} live sources · {fmtDate(today())}</span>
         </div>
         {view==="today"&&<Today open={setSelected}/>}
-        {view==="dash"&&<Dashboard opps={opps} open={setSelected}/>}
+       {view==="dash"&&<Dashboard opps={opps} open={setSelected}/>}
+    {view==="brief"&&<Briefing opps={opps} open={setSelected}/>}
         {view==="forecast"&&<Forecast open={setSelected}/>}
         {view==="broadcast"&&<Broadcast/>}
        {view==="search"&&<Search opps={opps} open={setSelected} profile={profile}/>}
