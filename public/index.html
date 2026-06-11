@@ -410,16 +410,33 @@ const y=latestYearInText(`${o.title||""} ${o.description||""}`);
 if(y!=null && y < new Date().getFullYear()) return true;
 return false;
 }
+// apply-evidence detection: a generic link is NOT an application path
+const APPLY_URL_RX = /apply|submission|submit|form|callforentry|artcall|submittable|tally|typeform|jotform|zapplication|eventeny|entrythingy|entry/i;
+const APPLY_TEXT_RX = /applications? (are )?(now )?open|now accepting|accepting (applications|submissions|vendors|artists)|call for (artists|entries|djs|vendors|performers)|seeking (djs|selectors|artists|vendors|performers|facilitators)|apply by|submit by|vendor applications?|booking (inquiries|now)|looking for (djs|artists|vendors|performers)|open call|rfq|rfp/i;
+const ANNOUNCE_RX = /tickets (available|on sale)|get tickets|rsvp|join us|come (through|thru|out)|doors (at|open)|free entry|no cover|this (friday|saturday|sunday|weekend)|tonight/i;
+const NOISE_RX = /trivia night|karaoke|open mic(?! call)|bingo|paint and sip|paint n sip|comedy night|brunch|book club|wine tasting|happy hour|speed dating/i;
+function hasApplyEvidence(o){
+const blob=(o.title||"")+" "+(o.description||"");
+if(o.applicationUrl && APPLY_URL_RX.test(o.applicationUrl)) return true;
+if(APPLY_TEXT_RX.test(blob)) return true;
+return false;
+}
+function isNoiseEvent(o){
+const blob=(o.title||"")+" "+(o.description||"");
+return NOISE_RX.test(blob) && !hasApplyEvidence(o);
+}
 function isAttendOnly(o){
 if(o.kindOverride==="opportunity") return false;  // you marked it actionable
 if(o.kindOverride==="event") return true;          // you marked it attend-only
-const hasPath = !!(o.applicationUrl||o.contactEmail||o.contactSocial);
-if(hasPath) return false;
-if(SUBMITTABLE_CAT.test(o.category||"")) return false;
-return true;
+if(hasApplyEvidence(o)) return false;              // real apply path found
+const blob=(o.title||"")+" "+(o.description||"");
+// direct human contact + no announcement language = still pitchable
+if((o.contactEmail||o.contactSocial) && !ANNOUNCE_RX.test(blob)) return false;
+return true;  // everything else is just an event to attend
 }
 function bucketOf(o){
 if(["Archived","Declined"].includes(o.status)) return "hidden";
+if(isNoiseEvent(o)) return "hidden";            // trivia/karaoke/etc — gone
 if(isExpired(o)) return "expired";
 if(isAttendOnly(o)) return "event";
 return "opportunity";
