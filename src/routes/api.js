@@ -7,7 +7,7 @@ import { parseIntake } from "../enrichment/parser.js";
 import { recurrenceForecasts, cadenceForecast } from "../enrichment/forecast.js";
 import { buildRoundup } from "../enrichment/broadcast.js";
 import { assessOpportunity } from "../enrichment/confidence.js";
-
+import { readUsage, runHunt } from "./discovery.js";
 export const api = express.Router();
 const uid = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -276,4 +276,22 @@ api.get("/public/feed", (_q, res) => {
       contactSocial: o.contactSocial,
     }));
   res.json({ enabled: true, brand: settings.brand, region: settings.region, items, asOf: new Date().toISOString() });
+});
+
+// ---- discovery / hunt (web search) ----
+api.get("/discover/usage", (_q, res) => {
+if (!process.env.BRAVE_API_KEY) return res.json({ error: true, message: "no key" });
+res.json(readUsage());
+});
+api.post("/discover", async (req, res) => {
+const key = process.env.BRAVE_API_KEY;
+if (!key) return res.json({ error: "no_key", message: "BRAVE_API_KEY not set in Railway Variables" });
+const queries = (req.body && req.body.queries) || [];
+if (!queries.length) return res.json({ error: "no_queries" });
+try {
+const r = await runHunt(key, queries);
+res.json(r);
+} catch (e) {
+res.json({ error: "hunt_failed", message: String((e && e.message) || e) });
+}
 });
