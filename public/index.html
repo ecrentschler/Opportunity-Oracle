@@ -1538,7 +1538,10 @@ const [added,setAdded]=useState({});
 const loadUsage=useCallback(async()=>{
 try{ const u=await API.get("/discover/usage"); setUsage(u); }catch(e){ setUsage({error:true}); }
 },[]);
-useEffect(()=>{ loadUsage(); },[loadUsage]);
+const loadLast=useCallback(async()=>{
+try{ const l=await API.get("/discover/last"); if(l&&l.results&&l.results.length) setResults(l.results); }catch(e){}
+},[]);
+useEffect(()=>{ loadUsage(); loadLast(); },[loadUsage,loadLast]);
 const hunt=async()=>{
 setBusy(true); setErr(""); setResults(null);
 try{
