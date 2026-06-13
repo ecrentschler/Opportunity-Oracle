@@ -1453,7 +1453,7 @@ const API = {
 };
 
 const NAV=[
-["today","Today","◉"],["brief","Briefing","✴"],["dash","Dashboard","◬"],
+["today","Today","◉"],["brief","Briefing","✴"],["hunt","Hunt","⟐"],["dash","Dashboard","◬"],
 ["forecast","Forecast","☉"],
 ["search","Search","⌖"],["pipe","Pipeline","▤"],["assist","Submission","✦"],
 ["events","Events","◷"],["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],
@@ -1501,7 +1501,103 @@ Kept here for reference or to catch a recurring one next cycle.
 </div>
 );
 }
-  
+  /* ---------- Hunt: search-discovery across the open web ---------- */
+const QUERY_PACKS={
+"DJ / Underground":[
+"open decks Detroit","seeking DJs Detroit","DJ submissions Michigan",
+"ecstatic dance DJ Michigan","Ypsilanti DJ night","bass music Detroit promoter",
+"art party Detroit DJ","Ann Arbor electronic music event"
+],
+"Dark Vendor Markets":[
+"oddities market Michigan vendor application","witch market Michigan vendor",
+"metaphysical fair vendor application Michigan","pagan festival vendor Michigan",
+"night market vendor Detroit","maker market Michigan apply"
+],
+"Art Calls / Murals":[
+"call for artists Detroit 2026","Michigan mural call","public art RFQ Michigan",
+"art installation application Michigan","Ann Arbor gallery open call","Ypsilanti art call"
+],
+"Festivals":[
+"festival vendor application Michigan 2026","music festival DJ submissions 2026",
+"transformational festival art grant","flow arts festival vendor application",
+"renaissance festival vendor application Michigan"
+],
+"Consignment / Shops":[
+"Ann Arbor metaphysical shop","oddities shop Michigan","witch shop Michigan",
+"Michigan gallery shop consignment","Detroit boutique handmade jewelry",
+"museum gift shop local artists Michigan"
+]
+};
+function Hunt({onAdded}){
+const [usage,setUsage]=useState(null);
+const [pack,setPack]=useState("Art Calls / Murals");
+const [busy,setBusy]=useState(false);
+const [results,setResults]=useState(null);
+const [err,setErr]=useState("");
+const [added,setAdded]=useState({});
+const loadUsage=useCallback(async()=>{
+try{ const u=await API.get("/discover/usage"); setUsage(u); }catch(e){ setUsage({error:true}); }
+},[]);
+useEffect(()=>{ loadUsage(); },[loadUsage]);
+const hunt=async()=>{
+setBusy(true); setErr(""); setResults(null);
+try{
+const r=await API.post("/discover",{queries:QUERY_PACKS});
+if(r.error){ setErr(r.message||r.error); }
+else { setResults(r.results||[]); setUsage(r.usage); }
+}catch(e){ setErr(String(e&&e.message||e)); }
+setBusy(false);
+};
+const addOne=async(hit)=>{
+const text=hit.title+"\n"+hit.description+"\n"+hit.url;
+const n=await onAdded(text, hit.url);
+if(n) setAdded(prev=>({...prev,[hit.url]:true}));
+};
+const left = usage&&!usage.error ? (usage.cap - usage.count) : null;
+return (
+<div>
+<div style={{background:"var(--char)",border:"1px solid var(--line)",padding:"16px 20px",marginBottom:18}}>
+<div className="serif" style={{fontSize:18,marginBottom:5}}>Hunt the open web</div>
+<div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6}}>
+Runs a pack of searches and surfaces what it finds. Review each hit, tap add to pull
+the good ones into your radar. Bounded to protect your free search credits.
+</div>
+</div>
+{usage&&usage.error&&<div style={{background:"#a8362e22",border:"1px solid #a8362e55",padding:"12px 15px",marginBottom:16}}>
+<div className="mono" style={{fontSize:11,color:"var(--red-bright)",lineHeight:1.6}}>
+Search key not set. Add BRAVE_API_KEY in Railway Variables, then redeploy.
+</div>
+</div>}
+<div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:18}}>
+<select value={pack} onChange={e=>setPack(e.target.value)} style={{width:"auto",minWidth:200}}>
+{Object.keys(QUERY_PACKS).map(p=><option key={p}>{p}</option>)}
+</select>
+<Btn kind="gold" onClick={hunt}>{busy?"hunting…":"run hunt ("+QUERY_PACKS[pack].length+" searches)"}</Btn>
+{left!=null&&<span className="mono" style={{fontSize:10,color:left<100?"var(--red-bright)":"var(--bone-faint)",marginLeft:"auto"}}>
+{left} searches left this month
+</span>}
+</div>
+{err&&<div className="mono" style={{fontSize:11,color:"var(--red-bright)",marginBottom:14}}>Hunt error: {err}</div>}
+{results&&results.length===0&&<div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>No results this run.</div>}
+{results&&results.length>0&&<div style={{display:"grid",gap:10}}>
+<div className="mono" style={{fontSize:10,color:"var(--bone-faint)"}}>{results.length} found - review and add the real ones</div>
+{results.map((h,i)=>(
+<div key={i} style={{background:"var(--char)",border:"1px solid var(--line)",padding:13}}>
+<div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
+<div style={{flex:1,minWidth:0}}>
+<a href={h.url} target="_blank" rel="noopener" className="serif"
+style={{fontSize:16,color:"var(--cyan-bright)",textDecoration:"none",display:"block",marginBottom:3}}>{h.title}</a>
+<div className="mono" style={{fontSize:9,color:"var(--bone-faint)",marginBottom:6}}>{h.site} - found via {h.foundVia}</div>
+<div style={{fontSize:12,color:"var(--bone-dim)",lineHeight:1.5}}>{h.description}</div>
+</div>
+<Btn size="s" kind={added[h.url]?"ghost":"cyan"} onClick={()=>addOne(h)}>{added[h.url]?"added":"add"}</Btn>
+</div>
+</div>
+))}
+</div>}
+</div>
+);
+}
 function Assistant({opps,open}){
 const ready=opps.filter(o=>["Packet Needed","Ready for Review","Contact Needed","Found","Saved"].includes(o.status))
 .sort((a,b)=>rankScore(b)-rankScore(a));
@@ -2114,7 +2210,8 @@ display:"flex",flexDirection:"column",padding:"22px 0"}}>
         </div>
         {view==="today"&&<Today open={setSelected}/>}
        {view==="dash"&&<Dashboard opps={opps} open={setSelected}/>}
-    {view==="brief"&&<Briefing opps={opps} open={setSelected}/>}
+{view==="brief"&&<Briefing opps={opps} open={setSelected}/>}
+{view==="hunt"&&<Hunt onAdded={async(text,url)=>{const p=parseIntake(text); p.applicationUrl=p.applicationUrl||url; return await addOpp({...p,id:uid(),status:"Found",createdAt:today(),lastCheckedAt:today(),sourceName:"Hunt",relationshipBoost:false});}}/>}
         {view==="forecast"&&<Forecast open={setSelected}/>}
         {view==="broadcast"&&<Broadcast/>}
        {view==="search"&&<Search opps={opps} open={setSelected} profile={profile}/>}
