@@ -1542,7 +1542,7 @@ useEffect(()=>{ loadUsage(); },[loadUsage]);
 const hunt=async()=>{
 setBusy(true); setErr(""); setResults(null);
 try{
-const r=await API.post("/discover",{queries:QUERY_PACKS});
+const r=await API.post("/discover",{queries:QUERY_PACKS[pack]});
 if(r.error){ setErr(r.message||r.error); }
 else { setResults(r.results||[]); setUsage(r.usage); }
 }catch(e){ setErr(String(e&&e.message||e)); }
