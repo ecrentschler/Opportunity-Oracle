@@ -37,6 +37,7 @@ usage.count += 1;
 for (const h of hits) out.push({ title: h.title, url: h.url, description: h.description, site: h.site, foundVia: q });
 }
 writeUsage(usage);
+store.setSettings({ lastHunt: { at: new Date().toISOString(), results: deduped } });
 const CUR = new Date().getFullYear();
 const freshOnly = out.filter((o) => {
 const m = ((o.title || "") + " " + (o.description || "")).match(/20[2-9]\d/g);
@@ -45,5 +46,6 @@ return Math.max.apply(null, m.map(Number)) >= CUR; // newest year is this year o
 });
 const seen = new Set(); const deduped = [];
 for (const o of freshOnly) { if (o.url && !seen.has(o.url)) { seen.add(o.url); deduped.push(o); } }
+store.setSettings({ lastHunt: { at: new Date().toISOString(), results: deduped } });
 return { usage: { month: usage.month, count: usage.count, cap: BRAVE_SAFETY_CAP }, results: deduped };
 }

@@ -283,6 +283,10 @@ api.get("/discover/usage", (_q, res) => {
 if (!process.env.BRAVE_API_KEY) return res.json({ error: true, message: "no key" });
 res.json(readUsage());
 });
+api.get("/discover/last", (_q, res) => {
+const s = store.getSettings() || {};
+res.json(s.lastHunt || { at: "", results: [] });
+});
 api.post("/discover", async (req, res) => {
 const key = process.env.BRAVE_API_KEY;
 if (!key) return res.json({ error: "no_key", message: "BRAVE_API_KEY not set in Railway Variables" });
