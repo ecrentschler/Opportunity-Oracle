@@ -1453,7 +1453,7 @@ const API = {
 };
 
 const NAV=[
-["today","Today","◉"],["brief","Briefing","✴"],["hunt","Hunt","⟐"],["dash","Dashboard","◬"],
+["today","Today","◉"],["brief","Briefing","✴"],["hunt","Hunt","⟐"],["djleads","DJ Leads","♬"],["dash","Dashboard","◬"],
 ["forecast","Forecast","☉"],
 ["search","Search","⌖"],["pipe","Pipeline","▤"],["assist","Submission","✦"],
 ["events","Events","◷"],["broadcast","Broadcast","➹"],["sources","Watchlist","◎"],
@@ -1528,6 +1528,200 @@ const QUERY_PACKS={
 "museum gift shop local artists Michigan"
 ]
 };
+  // === DJ GIG LEAD FEED - booking-agent layer over opportunities ===
+// A DJ lead is an opportunity with leadType set. These functions
+// classify pasted posts and power the DJ Leads tab + agent.
+const DJ_LEAD_SIGNALS=[
+["submit_mix_call",/\b(accepting\s+dj\s+submissions|submit\s+(your\s+)?mix(es)?|send\s+(your\s+)?mix(es)?|mix\s+submissions|lineup submissions)\b/i],
+["active_dj_request",/\b(djs?\s+wanted|looking for(\s+\w+){0,3}\s+djs?|seeking(\s+\w+){0,3}\s+(djs?|selectors)|need(ed)?\s+a?\s?dj|booking(\s+\w+){0,2}\s+djs?|who wants to play|tag a dj)\b/i],
+["open_decks_signup",/\b(open\s+decks|sign up to play|open turntables|come spin)\b/i],
+["support_slot_lead",/\b(support\s+slot|opener needed|opening\s+slot|support\s+dj|direct support)\b/i],
+["festival_application",/\b(festival\s+(application|submissions?|apply)|apply to play|performer application)\b/i],
+["vendor_dj_combo",/\b(vendor\s+(and|&|+)\s+dj|dj\s+(and|&|+)\s+vendor|vendors and djs)\b/i],
+["future_booking_funnel",/\b(now booking|future bookings|booking\s+(for\s+)?20[2-9]\d|booking inquiries|accepting bookings)\b/i],
+["recurring_event_series",/\b(every (week|month|thursday|friday|saturday)|monthly|weekly|residen(t|cy)|series)\b/i],
+["private_event_lead",/\b(private event|wedding|corporate|hire a dj)\b/i],
+["promoter_relationship",/\b(promoter|collective|booking team|talent buyer)\b/i],
+["art_party_hybrid",/\b(art party|gallery party|immersive)\b/i],
+];
+const DJ_LEAD_LABEL={
+submit_mix_call:"Submit a mix",active_dj_request:"Actively seeking DJs",
+open_decks_signup:"Open decks",support_slot_lead:"Support slot",
+festival_application:"Festival application",vendor_dj_combo:"Vendor + DJ",
+future_booking_funnel:"Future booking",art_party_hybrid:"Art party",
+recurring_event_series:"Recurring series",private_event_lead:"Private event",
+promoter_relationship:"Promoter relationship",
+};
+function djClassify(text){ const t=text||""; for(const [type,rx] of DJ_LEAD_SIGNALS){ if(rx.test(t)) return type; } return null; }
+function djPitchAngle(text){
+const t=(text||"").toLowerCase();
+if(/vendor.{0,40}(dj|music)|dj.{0,40}vendor|booth/.test(t)) return "vendor+DJ hybrid";
+if(/art party|gallery|immersive|installation|projection/.test(t)) return "art-party DJ";
+if(/ecstatic|conscious dance|sound journey|breathwork|cacao|movement/.test(t)) return "ritual/ecstatic DJ";
+if(/private|wedding|corporate/.test(t)) return "private event DJ";
+if(/goth|darkwave|ebm/.test(t)) return "dark/goth set";
+if(/techno|warehouse|industrial/.test(t)) return "underground techno set";
+if(/bass|dubstep|trap|halftime|riddim/.test(t)) return "ritual bass DJ";
+if(/support|opener|opening/.test(t)) return "opener";
+return "ritual bass DJ";
+}
+function djRequiredAsset(type){
+if(type==="submit_mix_call") return "30-min mix";
+if(type==="festival_application") return "EPK + live clip";
+if(type==="future_booking_funnel"||type==="promoter_relationship") return "DJ bio + mix links";
+if(type==="open_decks_signup") return "just show up + USB";
+return "IG profile + 1 mix link";
+}
+function djNextAction(type){
+const m={active_dj_request:"DM now — they are actively asking",submit_mix_call:"Send a mix link before the window closes",
+open_decks_signup:"Sign up / show up with a USB",support_slot_lead:"DM offering to open — low bar, fast yes",
+future_booking_funnel:"Pitch for a future date, no rush",recurring_event_series:"Build the relationship — pitch the series",
+festival_application:"Prep EPK and apply before deadline",art_party_hybrid:"Pitch the art+sound combo angle",
+vendor_dj_combo:"Offer the rare vendor+DJ double",private_event_lead:"Quote a rate, treat as paid work",
+promoter_relationship:"Warm intro — follow, engage, then DM"};
+return m[type]||"Research the contact, then DM";
+}
+function djUrgency(type,hasDeadline){
+let u={submit_mix_call:75,active_dj_request:85,open_decks_signup:60,support_slot_lead:70,festival_application:55,
+future_booking_funnel:30,recurring_event_series:40,art_party_hybrid:50,vendor_dj_combo:50,private_event_lead:65,
+promoter_relationship:25}[type]||40;
+if(hasDeadline) u=Math.min(100,u+15);
+return u;
+}
+function djBookability(type){
+return {open_decks_signup:90,support_slot_lead:80,active_dj_request:75,submit_mix_call:65,vendor_dj_combo:60,
+art_party_hybrid:55,recurring_event_series:50,private_event_lead:55,future_booking_funnel:45,
+festival_application:35,promoter_relationship:40}[type]||50;
+}
+function djDreamFit(text){
+const t=(text||"").toLowerCase(); let f=40;
+for(const k of ["ritual","ecstatic","bass","tribal","sacred","immersive","warehouse","underground","techno","goth","ambient","downtempo"]) if(t.includes(k)) f+=8;
+for(const k of ["top 40","wedding","corporate","cover","karaoke"]) if(t.includes(k)) f-=15;
+return Math.max(0,Math.min(100,f));
+}
+// turn pasted text into a DJ-lead-shaped opportunity patch
+function djLeadFromText(text,url,parseIntake){
+const base=parseIntake(text);
+const type=djClassify(text);
+base.applicationUrl=base.applicationUrl||url||"";
+if(!type) return {...base, leadType:"", _notDJ:true};
+const hasDeadline=!!base.deadline;
+return {
+...base,
+category:"DJ Booking",
+leadType:type,
+pitchAngle:djPitchAngle(text),
+requiredAsset:djRequiredAsset(type),
+djNext:djNextAction(type),
+djUrgency:djUrgency(type,hasDeadline),
+bookability:djBookability(type),
+dreamFit:djDreamFit(text),
+};
+}
+// the agent: pick 4 complementary moves
+function getBookedThisWeek(leads){
+const live=leads.filter(l=>!["booked","dead","Applied / Submitted","Accepted","Declined","Archived"].includes(l.status));
+const byUrg=(arr)=>[...arr].sort((a,b)=>(b.djUrgency||0)-(a.djUrgency||0));
+const inPerson=byUrg(live.filter(l=>l.leadType==="open_decks_signup"))[0]||byUrg(live.filter(l=>l.leadType==="recurring_event_series"))[0]||null;
+const dmNow=byUrg(live.filter(l=>["active_dj_request","support_slot_lead","submit_mix_call"].includes(l.leadType)))[0]||null;
+const pitch=byUrg(live.filter(l=>["promoter_relationship","future_booking_funnel","recurring_event_series","art_party_hybrid"].includes(l.leadType)&&l!==inPerson))[0]||null;
+const need=new Set([inPerson,dmNow,pitch].filter(Boolean).map(l=>l.requiredAsset));
+let assetTask="Record a fresh 30-min mix";
+if(need.has("EPK + live clip")) assetTask="Update your EPK and grab a live clip";
+else if(need.has("DJ bio + mix links")) assetTask="Refresh your DJ bio + pin 2 best mixes";
+return {inPerson,dmNow,pitch,assetTask};
+}
+  function DJLeads({opps,open,onPasteLead}){
+const leads=opps.filter(o=>o.leadType);
+const wk=useMemo(()=>getBookedThisWeek(leads),[opps]);
+const [showPaste,setShowPaste]=useState(false);
+const Move=({label,lead,fallback,color})=>(
+<div style={{flex:1,minWidth:200,background:"var(--char)",border:"1px solid "+(color||"var(--line)"),padding:13}}>
+<div className="mono" style={{fontSize:9,letterSpacing:".15em",color:color||"var(--gold)",marginBottom:7}}>{label}</div>
+{lead?(
+<div onClick={()=>open(lead)} style={{cursor:"pointer"}}>
+<div className="serif" style={{fontSize:16,lineHeight:1.2,marginBottom:4}}>{lead.title}</div>
+<div className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{lead.djNext||DJ_LEAD_LABEL[lead.leadType]}</div>
+</div>
+):<div className="mono" style={{fontSize:11,color:"var(--bone-faint)",fontStyle:"italic"}}>{fallback}</div>}
+</div>
+);
+const byUrg=[...leads].sort((a,b)=>(b.djUrgency||0)-(a.djUrgency||0));
+return (
+<div>
+<div style={{background:"linear-gradient(180deg,#1d1916 0%,#14110f 100%)",border:"1px solid var(--gold)",padding:"18px 20px",marginBottom:20}}>
+<div className="mono" style={{fontSize:9,letterSpacing:".22em",color:"var(--gold)",marginBottom:12}}>GET ME BOOKED THIS WEEK</div>
+<div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+<Move label="1 · SHOW UP" lead={wk.inPerson} fallback="No open-deck lead yet — paste one" color="var(--cyan-bright)"/>
+<Move label="2 · DM NOW" lead={wk.dmNow} fallback="No active request yet — paste one" color="var(--red-bright)"/>
+<Move label="3 · PITCH" lead={wk.pitch} fallback="No promoter/series lead yet" color="var(--violet-bright)"/>
+<div style={{flex:1,minWidth:200,background:"var(--char)",border:"1px solid var(--gold)",padding:13}}>
+<div className="mono" style={{fontSize:9,letterSpacing:".15em",color:"var(--gold)",marginBottom:7}}>4 · BUILD</div>
+<div className="serif" style={{fontSize:16,lineHeight:1.2}}>{wk.assetTask}</div>
+</div>
+</div>
+<Btn kind="gold" onClick={()=>setShowPaste(true)}>+ paste a post → DJ lead</Btn>
+</div>
+<div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:12}}>
+<h3 className="serif" style={{fontSize:19}}>All DJ leads</h3>
+<span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{leads.length}</span>
+<div style={{flex:1,height:1,background:"var(--line)"}}/>
+</div>
+{leads.length?(
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(330px,1fr))",gap:11}}>
+{byUrg.map(o=>(
+<div key={o.id} onClick={()=>open(o)} style={{background:"var(--char)",border:"1px solid var(--line)",padding:13,cursor:"pointer"}}>
+<div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:6}}>
+<Tag color="var(--gold)">{DJ_LEAD_LABEL[o.leadType]||o.leadType}</Tag>
+{o.pitchAngle&&<Tag color="var(--violet-bright)">{o.pitchAngle}</Tag>}
+</div>
+<div className="serif" style={{fontSize:16,lineHeight:1.2,marginBottom:5}}>{o.title}</div>
+<div className="mono" style={{fontSize:9,color:"var(--bone-faint)",lineHeight:1.7}}>
+{o.djNext&&<div style={{color:"var(--cyan)"}}>{o.djNext}</div>}
+{o.requiredAsset&&<div>need: {o.requiredAsset}</div>}
+<div>urg {o.djUrgency||0} · book {o.bookability||0} · dream {o.dreamFit||0}</div>
+</div>
+</div>
+))}
+</div>
+):<div className="mono" style={{fontSize:11,color:"var(--bone-faint)"}}>No DJ leads yet. Paste a post (an IG caption, Eventbrite text, RA listing) and the agent classifies it.</div>}
+{showPaste&&<DJPasteModal onClose={()=>setShowPaste(false)} onAdd={onPasteLead}/>}
+</div>
+);
+}
+function DJPasteModal({onClose,onAdd}){
+const [raw,setRaw]=useState("");
+const [preview,setPreview]=useState(null);
+const go=()=>{ if(raw.trim().length<8)return; setPreview(djLeadFromText(raw,"",parseIntake)); };
+return (
+<Modal onClose={onClose} wide>
+<div style={{padding:"26px 30px"}}>
+<h2 className="serif" style={{fontSize:24,marginBottom:4}}>Paste a post → DJ lead</h2>
+<p className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:16}}>
+IG caption · Eventbrite text · RA listing · Reddit post · FB event. The agent decides if it is a booking lead, what kind, and how to pitch.
+</p>
+<textarea value={raw} onChange={e=>setRaw(e.target.value)} rows={6}
+placeholder="Paste here — e.g. 'Seeking dark/tribal selectors for warehouse ritual Sat July 12. DM @collective'"/>
+<div style={{display:"flex",gap:8,marginTop:12}}>
+<Btn kind="gold" onClick={go}>read it</Btn>
+{preview&&!preview._notDJ&&<Btn kind="cyan" onClick={()=>{onAdd(preview);onClose();}}>add DJ lead ✓</Btn>}
+</div>
+{preview&&preview._notDJ&&<div className="mono" style={{fontSize:11,color:"var(--red-bright)",marginTop:14}}>
+Not a DJ booking lead — no booking signal found. You can still add it as a normal opportunity via "paste a door".
+</div>}
+{preview&&!preview._notDJ&&<div className="fadeUp" style={{marginTop:18,padding:15,background:"var(--black)",border:"1px solid var(--line)"}}>
+<div className="mono" style={{fontSize:9,color:"var(--gold)",letterSpacing:".1em",marginBottom:10}}>LEAD READ</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px 18px",fontSize:12}}>
+{[["Type",DJ_LEAD_LABEL[preview.leadType]],["Pitch as",preview.pitchAngle],["Next move",preview.djNext],
+["Need",preview.requiredAsset],["Urgency",String(preview.djUrgency)],["Bookability",String(preview.bookability)],
+["Dream fit",String(preview.dreamFit)],["Contact",preview.contactSocial||preview.contactEmail||"—"]]
+.map(([k,v])=><div key={k}><span className="mono" style={{fontSize:9,color:"var(--bone-faint)"}}>{k}: </span><span style={{color:"var(--bone)"}}>{v||"—"}</span></div>)}
+</div>
+</div>}
+</div>
+</Modal>
+);
+}
 function Hunt({onAdded}){
 const [usage,setUsage]=useState(null);
 const [pack,setPack]=useState("Art Calls / Murals");
@@ -2215,6 +2409,7 @@ display:"flex",flexDirection:"column",padding:"22px 0"}}>
        {view==="dash"&&<Dashboard opps={opps} open={setSelected}/>}
 {view==="brief"&&<Briefing opps={opps} open={setSelected}/>}
 {view==="hunt"&&<Hunt onAdded={async(text,url)=>{const p=parseIntake(text); p.applicationUrl=p.applicationUrl||url; return await addOpp({...p,id:uid(),status:"Found",createdAt:today(),lastCheckedAt:today(),sourceName:"Hunt",relationshipBoost:false});}}/>}
+{view==="djleads"&&<DJLeads opps={opps} open={setSelected} onPasteLead={async(lead)=>{await addOpp({...lead,id:uid(),status:"Found",createdAt:today(),lastCheckedAt:today(),sourceName:"DJ paste",relationshipBoost:false});}}/>}
         {view==="forecast"&&<Forecast open={setSelected}/>}
         {view==="broadcast"&&<Broadcast/>}
        {view==="search"&&<Search opps={opps} open={setSelected} profile={profile}/>}
