@@ -885,6 +885,7 @@ function Field({label,children}){
 
 function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
   const [tab,setTab]=useState("intel");
+  const [forging,setForging]=useState(false);
   const [tone,setTone]=useState("artistic");
   const [kind,setKind]=useState("initial inquiry");
   const [copied,setCopied]=useState("");
@@ -1034,8 +1035,10 @@ function OppDetail({o,profile,assets,onClose,onUpdate,onDelete}){
           {STAGES.map(s=><option key={s}>{s}</option>)}
         </select>
         {o.applicationUrl&&<Btn kind="cyan" onClick={()=>window.open(o.applicationUrl,"_blank")}>open application ↗</Btn>}
-      </div>
-    </Modal>
+        <Btn kind="gold" onClick={()=>setForging(true)}>⚒ forge submission</Btn>
+     </div>
+  {forging&&<SubmissionForge o={o} profile={profile} assets={assets} onClose={()=>setForging(false)}/>}
+</Modal>
   );
 }
 /* ============================================================
@@ -1719,6 +1722,134 @@ Not a DJ booking lead — no booking signal found. You can still add it as a nor
 </div>
 </div>}
 </div>
+</Modal>
+);
+}
+  // === SUBMISSION FORGE - curator/agent submission builder ===
+const FORGE_MODES=["Visual Artist","Jewelry / Adornment","Sculptor / Installation","DJ / Music","Workshop / Ritual","Vendor","Hybrid Art + DJ"];
+function recommendMode(o){
+const t=((o.title||"")+" "+(o.description||"")+" "+(o.category||"")).toLowerCase();
+const dj=/dj|set|selector|mix|lineup|bass|techno|sound|ecstatic|perform/.test(t);
+const vendor=/vendor|booth|market|sell|table/.test(t);
+const mural=/mural|installation|public art|sculpture|build/.test(t);
+const jewelry=/jewelry|adornment|wearable|craft/.test(t);
+const workshop=/workshop|teach|facilitate|class/.test(t);
+const gallery=/gallery|exhibition|show|juried|call for art/.test(t);
+if(dj&&(vendor||mural||gallery)) return "Hybrid Art + DJ";
+if(dj) return "DJ / Music";
+if(mural) return "Sculptor / Installation";
+if(workshop) return "Workshop / Ritual";
+if(vendor) return "Vendor";
+if(jewelry) return "Jewelry / Adornment";
+if(gallery) return "Visual Artist";
+return "Visual Artist";
+}
+function forgeScores(o){
+const fit=o.fitScore||0, val=o.valueScore||0, urg=o.urgencyScore||0, paid=(o.payMax||0)>0;
+return {
+opportunityFit:fit, assetFit:Math.min(100,fit+10), originality:60,
+curatorAppeal:/gallery|museum|juried|residency|grant/.test((o.category||"").toLowerCase())?70:50,
+effort:/grant|residency|mural|public art|installation/.test((o.category||"").toLowerCase())?80:40,
+deadlineUrgency:urg,
+acceptanceChance:Math.max(10,Math.min(90,Math.round(fit/1.667+(paid?0:10)+20))),
+moneyExposure:val,
+};
+}
+function forgeRecommendation(o,scores){
+if(scores.opportunityFit<35) return "Not worth submitting";
+if(scores.effort>=80&&scores.opportunityFit<55) return "Attend first, then pitch";
+const dj=/dj|music|sound|set/.test((o.category||"").toLowerCase());
+const art=/vendor|gallery|mural|art|install|residency|grant/.test((o.category||"").toLowerCase());
+if(dj&&art) return "Submit as hybrid";
+if(dj) return "Submit as DJ only";
+if(art) return "Submit as artist only";
+if(scores.acceptanceChance>=55) return "Submit now";
+return "Submit after adding better images";
+}
+function buildBrief(o,mode,assets,profile,questions){
+const L=[];
+L.push("You are my creative director, curator, and booking agent. Write a tailored submission package for the opportunity below. My work is dark, sacred, sensual, strange - ritual adornment, occult symbols, black/gold/copper, Egyptian/Nordic, and dark ritual bass DJ sets. Be concrete and specific to THIS opportunity, never generic or cheesy.");
+L.push("");
+L.push("=== SUBMISSION MODE ==="); L.push(mode); L.push("");
+L.push("=== THE OPPORTUNITY ===");
+L.push("Title: "+(o.title||"")); L.push("Category: "+(o.category||""));
+if(o.city) L.push("Location: "+o.city);
+if(o.deadline) L.push("Deadline: "+o.deadline);
+if(o.payMax) L.push("Pay: $"+o.payMax);
+if(o.fee) L.push("Fee: $"+o.fee);
+L.push("Details: "+(o.description||"(none saved)")); L.push("");
+L.push("=== ABOUT ME ===");
+L.push("Name: "+(profile.artistName||"Draem")+" / Dreamwalker Arts, based in "+(profile.location||"Michigan")+".");
+if((profile.artMediums||[]).length) L.push("Mediums: "+profile.artMediums.join(", "));
+if((profile.musicGenres||[]).length) L.push("Music: "+profile.musicGenres.join(", "));
+L.push("");
+if(assets&&assets.length){
+L.push("=== MY ASSETS (reference by title, pick the best) ===");
+for(const a of assets.slice(0,10)) L.push("- "+(a.type||"asset")+": "+((a.title||a.content||"")+"").slice(0,80));
+L.push("");
+}
+if(questions&&questions.trim()){ L.push("=== APPLICATION QUESTIONS TO ANSWER ==="); L.push(questions.trim()); L.push(""); }
+L.push("=== GENERATE ===");
+const dj=/DJ|Music/.test(mode), hybrid=/Hybrid/.test(mode);
+if(hybrid) L.push("A full hybrid concept (visual art + ritual adornment + DJ set + immersive atmosphere): why hybrid fits, what I bring, what the audience experiences, technical needs, short pitch, long pitch, email pitch, IG DM, follow-up.");
+else if(dj) L.push("A short DJ bio, event-specific pitch, genre/set description, a set concept (30/60/90 min), mix-submission message, links checklist, technical needs, email pitch, IG DM, follow-up.");
+else L.push("An artist statement, work descriptions, proposal paragraph, which pieces to send and why, materials/dimensions, install/price notes if relevant, answers to questions above, email pitch, IG DM, follow-up.");
+L.push("Also: the single strongest submission angle in one sentence, and any missing assets I should create first.");
+return L.join("\n");
+}
+function SubmissionForge({o,profile,assets,onClose}){
+const [mode,setMode]=useState(recommendMode(o));
+const [extra,setExtra]=useState("");
+const [questions,setQuestions]=useState("");
+const [copied,setCopied]=useState("");
+const oo=useMemo(()=>({...o,description:(o.description||"")+(extra?("\n"+extra):"")}),[o,extra]);
+const scores=useMemo(()=>forgeScores(oo),[oo]);
+const rec=useMemo(()=>forgeRecommendation(oo,scores),[oo,scores]);
+const brief=useMemo(()=>buildBrief(oo,mode,assets,profile,questions),[oo,mode,assets,profile,questions]);
+const copy=(txt,id)=>{navigator.clipboard.writeText(txt);setCopied(id);setTimeout(()=>setCopied(""),1500);};
+const SC=[["Opportunity fit","opportunityFit"],["Asset fit","assetFit"],["Originality","originality"],
+["Curator appeal","curatorAppeal"],["Effort (high=more)","effort"],["Deadline urgency","deadlineUrgency"],
+["Acceptance chance","acceptanceChance"],["Money/exposure","moneyExposure"]];
+return (
+<Modal onClose={onClose} wide>
+<div style={{padding:"26px 30px"}}>
+<div className="mono" style={{fontSize:9,letterSpacing:".22em",color:"var(--gold)",marginBottom:8}}>SUBMISSION FORGE</div>
+<h2 className="serif" style={{fontSize:26,lineHeight:1.15,marginBottom:6}}>{o.title}</h2>
+<div className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginBottom:18}}>{o.category} · {o.city||"location TBD"}</div>
+    <div style={{background:"var(--char2)",border:"1px solid var(--gold)",padding:"13px 16px",marginBottom:18}}>
+      <div className="mono" style={{fontSize:9,letterSpacing:".15em",color:"var(--gold)",marginBottom:5}}>RECOMMENDATION</div>
+      <div className="serif" style={{fontSize:20}}>{rec}</div>
+      <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",marginTop:4}}>Suggested mode: {recommendMode(o)}</div>
+    </div>
+
+    <label>Submission mode</label>
+    <select value={mode} onChange={e=>setMode(e.target.value)} style={{marginBottom:14}}>
+      {FORGE_MODES.map(m=><option key={m}>{m}</option>)}
+    </select>
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 18px",marginBottom:16}}>
+      {SC.map(([label,key])=>(
+        <div key={key} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderBottom:"1px solid #ffffff08"}}>
+          <span className="mono" style={{fontSize:10,color:"var(--bone-faint)"}}>{label}</span>
+          <b style={{color:scores[key]>=65?"var(--cyan-bright)":scores[key]>=45?"var(--gold)":"var(--bone-dim)"}}>{scores[key]}</b>
+        </div>
+      ))}
+    </div>
+
+    <Field label="Paste extra application text (optional)"><textarea rows={3} value={extra} onChange={e=>setExtra(e.target.value)} placeholder="Any extra detail from the call page…"/></Field>
+    <Field label="Application questions (optional — paste form questions, include char limits)"><textarea rows={3} value={questions} onChange={e=>setQuestions(e.target.value)} placeholder="e.g. Why do you want to participate? (300 chars)"/></Field>
+
+    <div style={{background:"linear-gradient(180deg,#1d1916,#14110f)",border:"1px solid var(--gold)",padding:"15px 17px",marginTop:8}}>
+      <div className="serif" style={{fontSize:17,marginBottom:6}}>Forge the submission</div>
+      <div className="mono" style={{fontSize:10,color:"var(--bone-faint)",lineHeight:1.6,marginBottom:12}}>
+        This builds a complete creative brief from the opportunity, your assets, and the mode. Copy it into Claude or ChatGPT (or paste back to your AI chat) to get a real, tailored, written submission package - statements, pitches, set concepts, answers. The app structures it; the AI writes it.
+      </div>
+      <textarea readOnly value={brief} rows={12} style={{fontFamily:"'Space Mono',monospace",fontSize:11,lineHeight:1.5}}/>
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <Btn kind="gold" onClick={()=>copy(brief,"brief")}>{copied==="brief"?"copied ✓":"copy brief for AI"}</Btn>
+      </div>
+    </div>
+  </div>
 </Modal>
 );
 }
